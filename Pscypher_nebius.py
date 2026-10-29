@@ -1,3 +1,4 @@
+# pyright: basic, reportMissingImports=false
 import colorsys
 import csv
 import json
@@ -8272,14 +8273,12 @@ class CriminalNetworkAnalyst:
         messagebox.showerror("FIR Processing Failed", message)
         self._ai_activity("FIR processing failed")
 
-
 def _on_close(root, app):
     try:
         app.neo4j.close()
         app.town.close()
     finally:
         root.destroy()
-
 
 if __name__ == "__main__":
     root = tk.Tk()

@@ -1,6 +1,6 @@
 # PSCYPHER measured evaluation
 
-Generated 2026-10-29 02:08 on a graph of 10 entities, 65 distinct relationships, 900 observations, 3 FIR(s). Ground truth: planted synthetic demo dataset.
+Generated 2026-10-29 09:34 on a graph of 10 entities, 65 distinct relationships, 700 observations, 3 FIR(s). Ground truth: planted synthetic demo dataset.
 
 ## E1 - FIR entity extraction (per FIR, people)
 
@@ -27,7 +27,7 @@ Random baseline precision@3: 0.30
 20 candidate pairs, 2 planted links. precision@2: 1.00, MRR: 1.00, ROC-AUC: 1.00, random baseline: 0.10
 
 Planted link ranks: Rohan Mehta <-> Kavya Nair -> #1, Sahil Verma <-> Kavya Nair -> #2
-Top-ranked pairs: Rohan Mehta <-> Kavya Nair (119 obs.); Sahil Verma <-> Kavya Nair (16 obs.); Sahil Verma <-> Manav Joshi (11 obs.); Dev Saxena <-> Tanvi Rao (10 obs.); Rohan Mehta <-> Ira Gupta (8 obs.)
+Top-ranked pairs: Rohan Mehta <-> Kavya Nair (96 obs.); Sahil Verma <-> Kavya Nair (8 obs.); Dev Saxena <-> Tanvi Rao (6 obs.); Sahil Verma <-> Manav Joshi (6 obs.); Rohan Mehta <-> Ira Gupta (5 obs.)
 
 ## E4 - Link prediction (held-out, stratified cross-validation inside each relation layer)
 
@@ -42,8 +42,8 @@ Questions: Q1 key players; Q2 cross-case bridge; Q3 FIR fact; Q4 missing-source 
 
 | Model | Q1 | Q2 | Q3 | Q4 | Q5 | Q6 | mean | tool calls | case citations (not found) | halluc. rate (case evidence) | external URLs (not returned) | time | est. cost |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| nvidia/nemotron-3-super-120b-a12b | 0.00 | 0.00 | 1.00 | 1.00 | 0.00 | 0.25 | **0.38** | 2 | 4 (0) | 0% | 2 (2) | 32s | $0.0242 |
-| nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B | 0.67 | 0.00 | 0.00 | 1.00 | 1.00 | 0.50 | **0.53** | 4 | 5 (1) | 20% | 1 (0) | 141s | $0.0135 |
+| nvidia/nemotron-3-super-120b-a12b | 0.00 | 0.00 | 1.00 | 1.00 | 0.00 | 0.50 | **0.42** | 1 | 5 (1) | 20% | 2 (0) | 24s | $0.0191 |
+| nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B | 1.00 | 0.00 | 1.00 | 1.00 | 1.00 | 0.50 | **0.75** | 10 | 8 (0) | 0% | 1 (0) | 246s | $0.0149 |
 
 ### Notes and limitations
 

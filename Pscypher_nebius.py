@@ -1,4 +1,3 @@
-# pyright: basic, reportMissingImports=false
 import colorsys
 import csv
 import json

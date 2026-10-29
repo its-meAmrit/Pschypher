@@ -6,8 +6,8 @@ PSCYPHER is a Tkinter + NetworkX desktop workbench that merges FIR documents, ca
 
 - **Hackathon:** Nebius x NVIDIA Global AI Hackathon, track **Best Apps and Agents**
 - **Runs on:** Nebius Token Factory (OpenAI-compatible API, `https://api.tokenfactory.nebius.com/v1/`)
-- **NVIDIA models:** `nvidia/nemotron-3-super-120b-a12b` (main: tool-calling copilot; also the evaluator role by default) and `nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B` (fast: parallel specialists). Both were called live on Token Factory in the evaluation run in [`docs/evaluation/`](docs/evaluation/pscypher_evaluation.md). `nvidia/Nemotron-3-Nano-Omni` is the configured vision model for scanned FIRs: **[FILL: vision check result from your live self-test, or "not exercised"]**. No Ultra model ID was configured **[FILL: confirm you did not set NEBIUS_MODEL_EVAL]**.
-- **Demo video:** **[FILL: YouTube URL]** | **Demo / static report:** **[FILL: URL]** | **Devpost:** **[FILL: URL]**
+- **NVIDIA models:** `nvidia/nemotron-3-super-120b-a12b` (main: tool-calling copilot; also the evaluator role by default) and `nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B` (fast: parallel specialists). Both were called live on Token Factory in the evaluation run in [`docs/evaluation/`](docs/evaluation/pscypher_evaluation.md). `nvidia/Nemotron-3-Nano-Omni` is the configured vision model for scanned FIRs:. No Ultra model ID was configured.
+- **Demo video:** **https://youtu.be/_3itHofAs88**
 - **Team:** Abhijeet Kumar (Ideation), Animesh Kumar (Backend), Krish Majhi (LLM Architecture), Saumya Baskar (Mathematical Aspects), Amritash Mishra (Design and frontend), Amritup Vats (Workflow)
 
 **Screenshots** (synthetic demo case: 10 entities, graph focus "Top 20"; the in-app legend, bottom left, explains the colours):
@@ -170,7 +170,7 @@ Hallucinated case-citation rate: Super 0% (0 of 4), Nano 20% (1 of 5). Totals fo
 - **Small-graph ML.** Link prediction needs at least 4 relationships and, on small graphs, metrics are noisy.
 - **Identity resolution is name-based.** Common names need human review. Exact-unique-name auto-confirm is a demo shortcut for datasets with known-unique names.
 - **Offline FIR path is registry-bound.** For digital PDFs it finds only names that exist in the registry; other entities require the cloud/OCR path.
-- **API assumptions not guaranteed.** Tool calling, JSON mode and image input depend on the endpoint and model. The self-test checks them; the catalog feature field names the app reads (`supported_features` / `features` / `capabilities`) are not guaranteed by the API. **[FILL: what your self-test showed]**
+- **API assumptions not guaranteed.** Tool calling, JSON mode and image input depend on the endpoint and model. The self-test checks them; the catalog feature field names the app reads (`supported_features` / `features` / `capabilities`) are not guaranteed by the API. 
 - **Perfect scores on E1-E3 are weak evidence.** E1 tests offline matching of unique names, E2 and E3 are easy on a 10-node planted graph (random baselines 0.30 and 0.10). They show the planted structure is recovered, nothing more.
 - **E4 is noisy.** Only 5-7 held-out positives per layer; the Transactions ROC-AUC of 0.63 is close to chance.
 - **E5 is one run of six questions.** Super scored 0.00 on Q1, Q2 and Q5 and Nano scored higher on the mean (0.53 vs 0.38); Super's two external URLs were not returned by the search tool and Nano had one case citation not found. These differences are not statistically meaningful, and the run used a graph with doubled transaction counts (see section 6).

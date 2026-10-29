@@ -1,0 +1,11 @@
+person,town_id,planted_role,in_FIR_01,in_FIR_02,in_FIR_03,core_network,cross_case_bridge
+Rohan Mehta,T00991,organizer,1,0,1,1,1
+Sahil Verma,T09166,lieutenant,1,0,1,1,1
+Kavya Nair,T06382,financial coordinator,0,1,1,1,1
+Dev Saxena,T05782,enforcer,1,0,0,0,0
+Aarav Iyer,T03668,insider/dispatcher,0,0,1,0,0
+Manav Joshi,T09850,money mule,0,1,0,0,0
+Ira Gupta,T00443,money mule,0,1,0,0,0
+Nisha Bose,T04994,victim (FIR-1 complainant),1,0,0,0,0
+Tanvi Rao,T00368,victim (FIR-2 complainant),0,1,0,0,0
+Abhay Dubey,T00484,"victim/witness (FIR-3 complainant, FIR-1 witness)",1,0,1,0,0

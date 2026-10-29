@@ -1,0 +1,5 @@
+# Core (required)
+networkx
+numpy
+scikit-learn
+openai

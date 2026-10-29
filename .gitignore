@@ -1,0 +1,13 @@
+# secrets and local state
+.env
+*.key
+pscypher_town.sqlite3
+pscypher_saved_answers.json
+# generated beside each FIR (contain absolute local paths)
+*_transcription.txt
+*_fir_cache_*.json
+# python
+__pycache__/
+*.pyc
+.venv/
+venv/

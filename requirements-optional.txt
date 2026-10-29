@@ -1,0 +1,9 @@
+# Optional features. Install only what you need: pip install -r requirements-optional.txt
+pydantic          # cloud FIR extraction (structured output validation)
+pillow            # local image OCR fallback
+pytesseract       # local image OCR fallback (also needs the Tesseract binary)
+thefuzz           # fuzzy FIR entity matching when the town registry is empty
+neo4j             # optional Neo4j mirror
+
+# PDF reading is also needed for the demo FIRs, but it is deliberately NOT listed here:
+# PyMuPDF is AGPL-3.0 (or commercial). See THIRD_PARTY.md before installing: pip install pymupdf

@@ -1,0 +1,276 @@
+{
+  "generated": "2026-10-29 02:08",
+  "nodes": 10,
+  "edges": 65,
+  "observations": 900,
+  "firs": 3,
+  "fir_extraction": {
+    "rows": [
+      {
+        "fir": "FIR-1",
+        "truth": 5,
+        "extracted": 5,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "missed": []
+      },
+      {
+        "fir": "FIR-2",
+        "truth": 4,
+        "extracted": 4,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "missed": []
+      },
+      {
+        "fir": "FIR-3",
+        "truth": 5,
+        "extracted": 5,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "missed": []
+      }
+    ],
+    "macro": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0
+    }
+  },
+  "key_players": {
+    "k": 3,
+    "core": [
+      "Kavya Nair",
+      "Rohan Mehta",
+      "Sahil Verma"
+    ],
+    "random_baseline": 0.3,
+    "rows": [
+      {
+        "measure": "Composite centrality",
+        "top": [
+          "Rohan Mehta",
+          "Sahil Verma",
+          "Kavya Nair"
+        ],
+        "precision_at_k": 1.0,
+        "ranks_of_core": {
+          "Kavya Nair": 3,
+          "Rohan Mehta": 1,
+          "Sahil Verma": 2
+        }
+      },
+      {
+        "measure": "Weighted degree",
+        "top": [
+          "Sahil Verma",
+          "Rohan Mehta",
+          "Kavya Nair"
+        ],
+        "precision_at_k": 1.0,
+        "ranks_of_core": {
+          "Kavya Nair": 3,
+          "Rohan Mehta": 2,
+          "Sahil Verma": 1
+        }
+      },
+      {
+        "measure": "Betweenness",
+        "top": [
+          "Sahil Verma",
+          "Rohan Mehta",
+          "Kavya Nair"
+        ],
+        "precision_at_k": 1.0,
+        "ranks_of_core": {
+          "Kavya Nair": 3,
+          "Rohan Mehta": 2,
+          "Sahil Verma": 1
+        }
+      },
+      {
+        "measure": "Evidence association score",
+        "top": [
+          "Sahil Verma",
+          "Kavya Nair",
+          "Rohan Mehta"
+        ],
+        "precision_at_k": 1.0,
+        "ranks_of_core": {
+          "Kavya Nair": 2,
+          "Rohan Mehta": 3,
+          "Sahil Verma": 1
+        }
+      }
+    ]
+  },
+  "cross_case": {
+    "firs": [
+      1,
+      2
+    ],
+    "candidate_pairs": 20,
+    "planted": 2,
+    "precision_at_k": 1.0,
+    "mrr": 1.0,
+    "auc": 1.0,
+    "random_baseline": 0.1,
+    "top": [
+      [
+        "Rohan Mehta <-> Kavya Nair",
+        119
+      ],
+      [
+        "Sahil Verma <-> Kavya Nair",
+        16
+      ],
+      [
+        "Sahil Verma <-> Manav Joshi",
+        11
+      ],
+      [
+        "Dev Saxena <-> Tanvi Rao",
+        10
+      ],
+      [
+        "Rohan Mehta <-> Ira Gupta",
+        8
+      ]
+    ],
+    "planted_ranks": {
+      "Rohan Mehta <-> Kavya Nair": 1,
+      "Sahil Verma <-> Kavya Nair": 2
+    }
+  },
+  "link_prediction": {
+    "rows": [
+      {
+        "relation": "Transactions",
+        "auc": 0.6326530612244898,
+        "ap": 0.6908686551543695,
+        "n_pos": 7,
+        "n_neg": 7
+      },
+      {
+        "relation": "Calls",
+        "auc": 0.8,
+        "ap": 0.7861904761904761,
+        "n_pos": 5,
+        "n_neg": 5
+      }
+    ]
+  },
+  "session_citations": null,
+  "llm": {
+    "questions": [
+      {
+        "id": "Q1",
+        "label": "key players",
+        "expected": [
+          "Kavya Nair",
+          "Rohan Mehta",
+          "Sahil Verma"
+        ]
+      },
+      {
+        "id": "Q2",
+        "label": "cross-case bridge",
+        "expected": [
+          "Kavya Nair",
+          "Rohan Mehta",
+          "Sahil Verma"
+        ]
+      },
+      {
+        "id": "Q3",
+        "label": "FIR fact",
+        "expected": "Abhay Dubey"
+      },
+      {
+        "id": "Q4",
+        "label": "missing-source probe",
+        "expected": "refuse: FIR_04 does not exist"
+      },
+      {
+        "id": "Q5",
+        "label": "exact total",
+        "expected": {
+          "total": 2951000.0,
+          "count": 40
+        }
+      },
+      {
+        "id": "Q6",
+        "label": "applicable law (web)",
+        "expected": "BNS s.308 (extortion); also s.351 (criminal intimidation)"
+      }
+    ],
+    "models": [
+      {
+        "model": "nvidia/nemotron-3-super-120b-a12b",
+        "scores": {
+          "Q1": 0.0,
+          "Q2": 0.0,
+          "Q3": 1.0,
+          "Q4": 1.0,
+          "Q5": 0.0,
+          "Q6": 0.25
+        },
+        "answers": {
+          "Q1": "Manav Joshi, Ira Gupta, Tanvi Rao  \nThese three have the highest observed connection density in the imported graph\u2014Manav Joshi shows 30 call and 12 transaction observations\u3010{\"id\":\"T09850\",\"name\":\"Manav Joshi\"}\u3011, Ira Gupta displays 19 call and 12 transaction observations\u3010{\"id\":\"T00443\",\"name\":\"Ira Gupta\"}\u3011, and Tanvi Rao is linked to 8 distinct neighbors with 16 relationship edges\u3010{\"id\":\"T00368\",\"name\":\"Tanvi Rao\"}\u3011, indicating they coordinate activity across multiple others.",
+          "Q2": "The call\u2011record shows **Tanvi\u202fRao** transacting with **Rohan\u202fMehta**:  \n- Financial transaction\u202f\u2081 \u2013 `financial_200_demo.csv`, row\u202f41 (timestamp\u202f2026\u201108\u201111\u202f14:20:35, amount\u202f\u20b912\u202f500, UPI)\u3010evidence\u3011  \n- Financial transaction\u202f\u2082 \u2013 `financial_200_demo.csv`, row\u202f126 (timestamp\u202f2026\u201109\u201102\u202f18:04:32, amount\u202f\u20b9800, IMPS)\u3010evidence\u3011\n\nRohan\u202fMehta is named in **FIR_01** (the extortion case) as an acquaintance who offered to \u201csettle the matter\u201d\u3010FIR_01 excerpt\u3011. Thus, Tanvi\u202fRao (from FIR_02) is financially linked to Rohan\u202fMehta, who connects to the individuals in FIR_01. No direct call or transaction ties the t",
+          "Q3": "Abhay Dubey  \nSource: FIR_0003 \u2013 \u201cFIR_03_SYNTHETIC_CARGO_THEFT.pdf\u201d (the excerpt lists \u201cComplainant: Abhay Dubey\u2026\u201d).",
+          "Q4": "No FIR numbered\u202f\u201cFIR_04\u201d appears among the imported documents; the available FIR files are FIR_0001, FIR_0002, and FIR_0003. Therefore there is no content to summarize regarding Rohan\u202fMehta in a non\u2011existent FIR_04.",
+          "Q5": "No transfer records exist directly linking Rohan\u202fMehta to Sahil\u202fVerma in the provided financial observations; therefore there is no total amount or transaction count to report.",
+          "Q6": "**Statute:** Indian Penal Code (IPC),\u202f1860  \n**Sections & Offences:**  \n- **Section\u202f506** \u2013 Criminal intimidation\u3010https://indiankanoon.org/doc/180217\u3011  \n- **Section\u202f384** \u2013 Extortion\u3010https://indiankanoon.org/doc/1944660\u3011  \n\nThese IPC provisions correspond to the provisional offence recorded in FIR_01 (\u201cCriminal intimidation and extortion\u201d). External URLs are provided for legal context only and are not case evidence."
+        },
+        "mean_score": 0.375,
+        "tool_calls": 2,
+        "citations": 4,
+        "unverified": 0,
+        "hallucinated_citation_rate": 0.0,
+        "web_citations": 2,
+        "web_unverified": 2,
+        "web_unverified_rate": 1.0,
+        "seconds": 31.571491956710815,
+        "tokens": 76903,
+        "cost_usd": 0.0241965,
+        "errors": []
+      },
+      {
+        "model": "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B",
+        "scores": {
+          "Q1": 0.6666666666666666,
+          "Q2": 0.0,
+          "Q3": 0.0,
+          "Q4": 1.0,
+          "Q5": 1.0,
+          "Q6": 0.5
+        },
+        "answers": {
+          "Q1": "Dev Saxena, Sahil Verma, Rohan Mehta. They co\u2011appear in multiple FIRs (FIR_0001, FIR_0003) and show the highest network centrality metrics.",
+          "Q2": "Yes. The imported graph is a single connected component. Financial records show Tanvi\u202fRao (FIR_02) transferred money to\u202fRohan\u202fMehta (financial_200_demo.csv rows\u202f41,\u202f126) and received a call from him (cdr_500_demo.csv row\u202f39). Rohan\u202fMehta is named in FIR_01, thus linking the two cases. Additionally, Kavya\u202fNair appears in FIR_02 as a beneficiary and also in FIR_03 together with Abhay\u202fDubey and Sahil\u202fVerma, providing another bridge between the investigations.",
+          "Q3": "**Abhay\u202fDubey** \u2013 the complainant in the FIR dated\u202f26\u202fSeptember\u202f2026 (FIR\u202f0003).  \n\n*Source: \u201cFIR_0003_SYNTHETIC_CARGO_THEFT.pdf\u201d (FIR\u202f0003 narrative, point\u202f1).*",
+          "Q4": "The evidence set includes no FIR document named **FIR_04**. Only **FIR_0001** and **FIR_0003** mention Rohan\u202fMehta, so a summary of what FIR_04 says about him cannot be provided.",
+          "Q5": "The graph records **40 transaction observations** from\u202f**Rohan\u202fMehta\u202f\u2192\u202fSahil\u202fVerma**, with a **total amount of \u20b92,951,000**.  \n\n*Source: relationship_summary output \u2013 \u201cRohan Mehta -> Sahil Verma\u201d \u2013 observations\u202f40, total_amount\u202f2951000.0.*",
+          "Q6": "The offence recorded in **FIR_01** is *extortion* (with criminal intimidation) under the **Indian Penal Code, 1860** \u2013 specifically **Section\u202f383** for extortion and **Section\u202f506** for criminal intimidation.  \n\n**External sources (web)**  \nhttps://www.scribd.com/document/560290651/Research-Note-Extortions-Criminal-Intimidation-Under-IPC"
+        },
+        "mean_score": 0.5277777777777778,
+        "tool_calls": 4,
+        "citations": 5,
+        "unverified": 1,
+        "hallucinated_citation_rate": 0.2,
+        "web_citations": 1,
+        "web_unverified": 0,
+        "web_unverified_rate": 0.0,
+        "seconds": 140.81788682937622,
+        "tokens": 148249,
+        "cost_usd": 0.013460820000000002,
+        "errors": []
+      }
+    ]
+  }
+}

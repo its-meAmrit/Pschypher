@@ -29,7 +29,7 @@ PSCYPHER is a Tkinter + NetworkX desktop workbench that merges FIR documents, ca
 
 ## 2. Setup
 
-**Requirements.** Python 3 with tkinter (**[FILL: the exact version you tested on; I did not verify a minimum version]**), a Nebius Token Factory API key, and the packages below.
+**Requirements.** Python 3 with tkinter, a Nebius Token Factory API key, and the packages below.
 
 ```bash
 git clone <this repository> && cd pscypher-nebius
@@ -60,7 +60,7 @@ python Pscypher_nebius.py
 
 **Verify your setup first.** Use **Analysis > Run Live Self-Test**. It sends only generic synthetic probes and reports PASS/WARN/FAIL for: key accepted and catalog listing, each configured model ID present in the catalog, a chat completion per text model, JSON mode on the eval model, tool calling on the main model, vision reading a generated image, and tokens/estimated cost. **Analysis > Check Nebius Models & Tool Support** lists the catalog features per model.
 
-**Load the demo case.** The synthetic dataset is in `pscypher_demo_dataset/` next to the script; run the app from the repository root, then **File > Load Demo Case**. It loads the registry, three FIR PDFs, the CDR and financial CSVs, then runs centrality, communities, anomalies and link prediction. The dataset's own documentation lists the expected result as 10 people, 65 distinct relationship edges (29 Calls + 36 Transactions) and 700 observations. **[FILL: confirm these against the dialog you actually saw, and record the load time]**
+**Load the demo case.** The synthetic dataset is in `pscypher_demo_dataset/` next to the script; run the app from the repository root, then **File > Load Demo Case**. It loads the registry, three FIR PDFs, the CDR and financial CSVs, then runs centrality, communities, anomalies and link prediction. The dataset's own documentation lists the expected result as 10 people, 65 distinct relationship edges (29 Calls + 36 Transactions) and 700 observations.
 
 Then **File > Export Interactive HTML Case Report**.
 
@@ -124,11 +124,11 @@ All model calls go through the standard `openai` client pointed at Token Factory
 
 - **Tool-calling copilot.** `run_tool_agent` lets the model call up to 10 tools (`investigation_summary`, `find_entity`, `entity_context`, `anomalies_for_entity`, `evidence_for_entity`, `shortest_path`, `search_fir_text`, `relationship_summary`, `link_prediction_for`, `web_context`) for at most 6 turns, then forces a final answer. If the endpoint rejects `tools`, it falls back to a single-shot answer. `relationship_summary` returns exact totals so the model never estimates a sum.
 - **Parallel specialists.** `parallel_specialists` sends three Nano calls at once with a thread pool; one failed specialist does not abort the analysis. The app records wall-clock time against the sum of per-call times and prints it on the `MODEL ROUTING` line.
-- **Vision.** For image-only FIRs, an Omni call returns JSON validated against a Pydantic schema. If it fails, the app falls back to local text, then to Tesseract. The demo's three FIRs are digital PDFs and take the offline path, so they do not exercise the vision model. **[FILL: say whether you tested a real scanned/handwritten FIR and with what result]**
+- **Vision.** For image-only FIRs, an Omni call returns JSON validated against a Pydantic schema. If it fails, the app falls back to local text, then to Tesseract. The demo's three FIRs are digital PDFs and take the offline path, so they do not exercise the vision model.
 - **Citation verifier.** Cited CSV filenames and rows are checked against the loaded evidence; cited external URLs are checked against the URLs `web_context` actually returned, and reported separately from case evidence.
 - **Cost and token accounting.** Every call's token usage is recorded (Analysis > AI Usage & Cost). The price table in the code is approximate (taken from a third-party gateway listing); confirm against the Token Factory catalog.
 
-**Where Token Factory sped things up.** We have no measurement of a speed-up and make no claim of one. What we did measure (evaluation run of 2026-10-29, see section 6; that run used a graph with duplicated transaction counts, so re-run before quoting it): the Super model answered the six evaluation questions in 31.6 s (2 tool calls, 76,903 tokens, estimated $0.0242) and the Nano model in 140.8 s (4 tool calls, 148,249 tokens, estimated $0.0135); both used Token Factory's OpenAI-compatible tool calling. **[FILL: the `MODEL ROUTING` line (parallel wall-clock vs sequential estimate) from an Explain Score run, if you want to claim a parallel speed-up; otherwise delete this placeholder.]**
+**Where Token Factory sped things up.** We have no measurement of a speed-up and make no claim of one. What we did measure (evaluation run of 2026-10-29, see section 6; that run used a graph with duplicated transaction counts, so re-run before quoting it): the Super model answered the six evaluation questions in 31.6 s (2 tool calls, 76,903 tokens, estimated $0.0242) and the Nano model in 140.8 s (4 tool calls, 148,249 tokens, estimated $0.0135); both used Token Factory's OpenAI-compatible tool calling.
 
 ## 5. Data-privacy notes
 

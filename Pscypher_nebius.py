@@ -1,5 +1,3 @@
-# SPDX-License-Identifier: Apache-2.0
-# Copyright 2026 PSCYPHER contributors
 import colorsys
 import csv
 import json
@@ -2532,21 +2530,22 @@ traits that are not explicitly present.""",
         prompt = (
             f"INVESTIGATOR QUESTION: {question}\n\n"
             f"LIVE GRAPH EVIDENCE (JSON):\n{self._context_text(node_id, question)}\n\n"
-            "Give a concrete investigative answer, not generic advice. "
-            "Name 3-6 relevant entities whenever evidence permits; explain why each matters, "
-            "quote observed connection counts, label relationship types and identify exact CSV filenames/rows "
-            "where provided. Compare central hubs with brokers and peripheral nodes. "
-            "If asked about a possible trafficking ring, explain which patterns are consistent with the "
-            "hypothesis AND what alternative explanations remain; never assert trafficking is established. "
-            "For each important claim distinguish OBSERVED vs HYPOTHESIS. "
-            "Finish with 2-4 specific verification actions involving named nodes or records. "
-            "If evidence does not support an answer, explicitly say what is missing. "
-            "Use FIR source_text_excerpt to distinguish a person's mention, role (victim, witness, suspect), "
-            "incident dates and narrative details from CDR/financial observations; cite exact FIR filename. "
-            "If no FIR implicates the selected entity, state that explicitly. "
-            "Do not invent timestamps, amounts, FIR content or names. "
-            "Use simple plain-text headings and numbered statements; avoid Markdown symbols (#, **, backticks). "
-            "Aim for 250-450 words if data warrants detail."
+            "Answer in EXACTLY this plain-text layout, with no Markdown symbols (#, **, backticks):\n"
+            "HEADLINE: one sentence that directly answers the question.\n"
+            "EVIDENCE:\n"
+            "RECORD: a claim backed by CDR/financial data, quoting counts or amounts, ending with (exact_file.csv row N)\n"
+            "FIR: a claim that comes only from an FIR narrative, ending with (exact FIR filename); give the person's stated role\n"
+            "INFERENCE: your own reasoning, clearly unconfirmed\n"
+            "CAVEAT: one line on what is missing or the strongest alternative explanation.\n"
+            "Give 2-4 EVIDENCE lines, one claim per line, each starting with RECORD:, FIR: or INFERENCE:. "
+            "Name the key entities and keep the whole answer under 120 words. "
+            "Use a Markdown table only if the investigator explicitly asks to list or tabulate records. "
+            "Use only filenames and rows that appear in the evidence; never invent timestamps, amounts, FIR content or names. "
+            "If no FIR implicates the entity, say so in a FIR: line. If the evidence does not support an answer, "
+            "say so in the HEADLINE and use CAVEAT for what is missing. "
+            "If asked about a possible ring, say which patterns fit and which alternative explanations remain; "
+            "never assert it is established. A graph score or centrality is a lead, not proof of guilt. "
+            "If you used web_context, add one last line 'External sources (web): <exact URLs>'."
         )
         return self._agentic_answer(prompt, node_id)
 
@@ -2559,6 +2558,7 @@ traits that are not explicitly present.""",
         if not status:
             raise RuntimeError(detail + self._unavailable_hint())
         self.last_run_summary = ""
+        self.last_run_routing = ""
         context = self._context_text(node_id, "Explain this entity with specific evidence")
         deterministic = self.app.calculate_evidence_score(node_id)
 
@@ -2569,20 +2569,19 @@ Create a compact investigation briefing for the SELECTED entity. Act as three
 internal perspectives (network criminology, temporal patterns, context) and one
 Evidence Evaluator, but output their combined gist rather than verbose sections.
 Return ONLY a valid JSON object (no markdown/code fences) with keys:
-"gist": string, 2-3 concise sentences combining the three perspectives,
-  cite the specific FIR and describe the selected person's stated role in it when applicable;
-  then correlate with named linked entities and observed CDR/financial records;
-"hypothesis": string, 1-2 sentences clearly qualified as UNCONFIRMED and
-  supported by FIR narrative AND interaction evidence if both are available;
-"alternative": string, one sentence on alternative explanation or missing proof;
-"next_questions": array of 2-3 short, specific investigator questions grounded in
-  the named nodes, records or missing evidence (each should be actionable).
+"headline": string, ONE sentence (max 25 words) stating the entity's likely role, qualified as unconfirmed;
+"evidence": array of 2-4 objects {"kind": "record" | "fir" | "inference", "text": string}, one claim each, max 25 words:
+  "record" = backed by CDR/financial data in the context, ending with (exact_file.csv row N) when a row is given;
+  "fir" = comes only from an FIR narrative, ending with (exact FIR filename) and giving the person's stated role;
+  "inference" = your own reasoning, unconfirmed;
+"caveat": string, ONE line: the strongest alternative explanation or the missing proof;
+"next_questions": array of 2-3 questions, each at most 12 words, about the selected entity and named nodes or records.
 Do not repeat numerical score components: they are displayed deterministically by the UI.
 Do not claim a person committed a crime or treat graph centrality as guilt.
 Do not invent chronology from timestamps not in the context.
 Do not claim that a FIR mention itself implicates a person; recognize victim/witness roles.
 If FIRs are missing or unrelated, explicitly say so rather than implying corroboration.
-Keep total text in these fields under 160 words.
+Keep total text in these fields under 120 words.
 """
             prompt = (
                 f"DETERMINISTIC EVIDENCE ASSOCIATION SCORE: {deterministic['score']:.0f}/100\n"
@@ -2598,6 +2597,8 @@ Keep total text in these fields under 160 words.
             return final, {"mode": "one_pass_multi_perspective"}, deterministic
 
         self.last_run_summary = ""
+
+        self.last_run_routing = ""
         usage_start = len(getattr(self.backend, "_usage", []))
         self.app._ai_activity("Three Nemotron Nano specialists are analyzing in parallel...")
         spec_stats = {}
@@ -2606,11 +2607,11 @@ Keep total text in these fields under 160 words.
 
         evaluator_system = self.BASE_RULES + """
 Synthesize the three internal perspectives in the same concise JSON format:
-{"gist":"2-3 sentences of specific grounded network/temporal/contextual observations",
- "hypothesis":"1-2 sentences, unconfirmed evidence-evaluator hypothesis",
- "alternative":"one sentence limiting interpretation or alternative explanation",
- "next_questions":["specific question 1","specific question 2"]}
-Output valid JSON only; no markdown or extra prose. Under 160 words total.
+{"headline":"one sentence (max 25 words), qualified as unconfirmed",
+ "evidence":[{"kind":"record | fir | inference","text":"one claim, max 25 words, with its source file in brackets when known"}],
+ "caveat":"one line: the strongest alternative explanation or the missing proof",
+ "next_questions":["a question of at most 12 words","another"]}
+Give 2-4 evidence objects. Output valid JSON only; no markdown or extra prose. Under 120 words total.
 Keep deterministic score unchanged and do not infer guilt.
 """
         evaluator_prompt = (
@@ -2632,11 +2633,15 @@ Keep deterministic score unchanged and do not infer guilt.
         summary = (f"MODEL ROUTING: {len(self.SPECIALISTS)} specialists on "
                    f"{str(self.backend.model_for('fast')).split('/')[-1]} in parallel "
                    f"({spec_stats.get('wall', 0):.1f}s; ~{spec_stats.get('sequential_est', 0):.1f}s if run one by one) "
-                   f"-> evaluator on {str(self.backend.model_for('eval')).split('/')[-1]} ({t_eval:.1f}s). "
-                   f"{tokens:,} tokens" + (f", est. cost ~${cost:.4f}." if cost is not None else "."))
+                   f"-> evaluator on {str(self.backend.model_for('eval')).split('/')[-1]} ({t_eval:.1f}s).")
+        routing = summary
+        summary += f" {tokens:,} tokens" + (f", est. cost ~${cost:.4f}." if cost is not None else ".")
         if spec_stats.get("failures"):
-            summary += f" Failed specialists: {', '.join(spec_stats['failures'])}."
-        self.last_run_summary = summary
+            fail_note = f" Failed specialists: {', '.join(spec_stats['failures'])}."
+            summary += fail_note
+            routing += fail_note
+        self.last_run_routing = routing      # shown in the answer; tokens/cost belong to the MODEL COST card
+        self.last_run_summary = summary      # full line, kept for the HTML report
         return final, outputs, deterministic
 
 
@@ -3932,10 +3937,156 @@ def build_case_report_html(app, data=None):
 #  WORKBENCH GUI
 # ============================================================================
 
+
+# ============================================================================
+#  UI POLISH: shared palette + citation locator (pure functions, testable without Tk)
+# ============================================================================
+UI_BG = "#d9d9d9"            # panel background
+UI_HEAD_BG = "#404040"       # section header bar
+UI_HEAD_FG = "white"
+UI_PRIMARY = "#66cccc"       # main action (teal)
+UI_NEUTRAL = "#ececec"       # ordinary action
+UI_QUIET = "#bbbbbb"         # show/hide toggles
+UI_DANGER = "#ff6666"        # destructive action
+UI_FONT = ("Arial", 9)
+UI_FONT_BOLD = ("Arial", 9, "bold")
+UI_HEAD_FONT = ("Arial", 10, "bold")
+UI_PADX = 10
+UI_DIM_NODE, UI_DIM_NODE_LINE, UI_DIM_TEXT = "#e6e9ed", "#cdd3da", "#8a94a0"   # de-emphasised (not selected) items
+UI_DIM_EDGE = "#d9dee4"
+UI_DIM_NEIGHBOURS = True       # True: only the selected node and its links keep colour. False: its neighbours do too.
+UI_PADY = 3
+
+STATUS_READY = "Ready. Use the File menu to import case data or upload a FIR, then click an entity or ask the copilot."
+STATUS_SELECT = "Select mode: click an entity to inspect it, drag to move it."
+STATUS_LINK = "Link mode: click the first entity, then the second entity."
+STATUS_PATH = "Path mode: click the start entity, then the destination entity."
+
+
+# Weights of calculate_evidence_score(); used to name the two signals that drive a score.
+_SCORE_PARTS = {"network_influence": (0.30, "network position"), "anomaly_signals": (0.25, "anomaly signals"),
+                "relationship_strength": (0.20, "relationship strength"), "FIR_correlation": (0.15, "FIR mentions"),
+                "link_prediction_signal": (0.10, "predicted links")}
+
+
+def score_drivers(components, n=2):
+    """[(label, points)] - the strongest contributors to the 0-100 evidence score."""
+    pts = sorted(((w * float((components or {}).get(k, 0) or 0) * 100.0, label) for k, (w, label) in _SCORE_PARTS.items()),
+                 reverse=True)
+    return [(label, p) for p, label in pts if p >= 0.5][:n]
+
+
+def score_sentence(score, components):
+    d = score_drivers(components)
+    if not d:
+        return f"{float(score):.0f}/100 (no strong signals yet). Not a guilt probability."
+    return f"{float(score):.0f}/100, driven by " + " and ".join(f"{label} (+{p:.0f})" for label, p in d) + ". Not a guilt probability."
+
+
+_SA_HEAD = re.compile(r"^headline\s*[:\-]\s*(.*)$", re.I)
+_SA_EV = re.compile(r"^evidence\s*[:\-]?\s*$", re.I)
+_SA_ITEM = re.compile(r"^(records?|csv|fir|inference|hypothesis)\s*[:\-]\s*(.+)$", re.I)
+_SA_CAVEAT = re.compile(r"^(?:caveat|limitations?)\s*[:\-]\s*(.*)$", re.I)
+
+
+def parse_structured_answer(text):
+    """Parse the copilot's HEADLINE / EVIDENCE (RECORD|FIR|INFERENCE lines) / CAVEAT layout.
+    Returns {headline, evidence:[(kind, text)], caveat, other:[str]} or None when the model did not follow it."""
+    head, items, cav, other, mode = "", [], [], [], None
+    for raw in str(text or "").splitlines():
+        plain = raw.strip().replace("**", "")
+        if not plain:
+            continue
+        s_ = re.sub(r"^(?:[#>*•\-]+\s*|\d{1,2}[.)]\s+)", "", plain).strip()
+        if re.match(r"(?i)^external sources", s_):
+            other.append(plain)
+            mode = "other"
+            continue
+        m = _SA_HEAD.match(s_)
+        if m:
+            head, mode = m.group(1).strip(), "head"
+            continue
+        if _SA_EV.match(s_):
+            mode = "ev"
+            continue
+        m = _SA_ITEM.match(s_)
+        if m:
+            k = m.group(1).lower()
+            items.append(["record" if k in ("record", "records", "csv") else "fir" if k == "fir" else "inference",
+                          m.group(2).strip()])
+            mode = "ev"
+            continue
+        m = _SA_CAVEAT.match(s_)
+        if m:
+            if m.group(1).strip():
+                cav.append(m.group(1).strip())
+            mode = "cav"
+            continue
+        if mode == "head":
+            head += " " + plain
+        elif mode == "ev" and items:
+            items[-1][1] += " " + plain
+        elif mode == "cav":
+            cav.append(plain)
+        else:
+            other.append(plain)     # also the continuation of an 'External sources' line
+    if not head or not (items or cav):
+        return None
+    return {"headline": head, "evidence": [tuple(i) for i in items], "caveat": " ".join(cav), "other": other}
+
+
+def text_on(colour):
+    """Black or white, whichever is readable on `colour` (hex '#rrggbb'); falls back to dark text."""
+    try:
+        c = str(colour).lstrip("#")
+        r, g, b = int(c[0:2], 16), int(c[2:4], 16), int(c[4:6], 16)
+        return "#111111" if (0.299 * r + 0.587 * g + 0.114 * b) > 150 else "#ffffff"
+    except Exception:
+        return "#111111"
+
+
+def find_answer_citations(app, text):
+    """Locate every cited source file / 'file row N' in `text` and classify it against the loaded evidence.
+    URLs are masked first (an external link is never mistaken for a case file), mirroring verify_citations().
+    Returns a list of {start, end, text, file, row, label, status} sorted by position; status is 'ok' or 'bad'."""
+    text = str(text or "")
+    masked = _URL_RE.sub(lambda m: " " * len(m.group(0)), text)
+    files, rows = known_sources(app)
+    out, taken = [], []
+
+    def free(a, b):
+        return all(b <= x or a >= y for x, y in taken)
+
+    for m in _ROW_RE.finditer(masked):
+        raw, row = m.group(1), m.group(2)
+        lead = len(raw) - len(raw.lstrip("()"))
+        fname = raw.strip("()")
+        a, b = m.start(1) + lead, m.end()
+        if not fname or not free(a, b):
+            continue
+        taken.append((a, b))
+        out.append({"start": a, "end": b, "text": text[a:b], "file": fname, "row": row,
+                    "label": f"{fname} row {row}",
+                    "status": "ok" if (fname.lower(), row) in rows else "bad"})
+    for m in _FILE_RE.finditer(masked):
+        raw = m.group(0)
+        lead = len(raw) - len(raw.lstrip("()"))
+        trail = len(raw) - len(raw.rstrip("()"))
+        fname = raw.strip("()")
+        a, b = m.start() + lead, m.end() - trail
+        if not fname or not free(a, b):
+            continue
+        taken.append((a, b))
+        out.append({"start": a, "end": b, "text": text[a:b], "file": fname, "row": None,
+                    "label": fname, "status": "ok" if fname.lower() in files else "bad"})
+    out.sort(key=lambda c: c["start"])
+    return out
+
+
 class CriminalNetworkAnalyst:
     def __init__(self, root):
         self.root = root
-        self.root.title("PSCYPHER - Intelligence Analyst Workbench (NVIDIA Nemotron on Nebius Token Factory)")
+        self.root.title("PSCYPHER — Criminal Network Analyst Workbench")
         self.root.geometry("1400x850")
         self.root.configure(bg="#f0f0f0")
 
@@ -3962,7 +4113,7 @@ class CriminalNetworkAnalyst:
         # Status text is still tracked (used by the activity line / OCR), but the
         # AI backend controls are not shown in the UI: the key comes from the
         # NEBIUS_API_KEY environment variable and models from NEBIUS_MODEL_* variables.
-        self.ai_status_var = tk.StringVar(value="● CHECKING AI")
+        self.ai_status_var = tk.StringVar(value="… CHECKING AI")
         self.ai_model_label_var = tk.StringVar(value="Nebius Token Factory")
         self._ai_settings = {}
         self._apply_ai_settings()
@@ -3987,11 +4138,26 @@ class CriminalNetworkAnalyst:
                                    "#fabebe", "#008080"]
 
         self._entity_type_colors = {}  # cache for auto-generated type colors
+        self.layout_mode = "hierarchy"    # "hierarchy" (most connected on top) | "network" (force-directed)
+        self._fir_inflight = {}           # FIR file name -> "processing" | "failed" (shown in CASE FILES)
+        self._fir_current = ""
+        self._case_files_sig = None
+        self._case_file_rows = []
+        self._cost_mark = 0               # backend usage index at the start of the latest AI request
+        self._view_off = [0.0, 0.0]       # pan offset (screen pixels), applied after zoom
+        self._view_zoom_prev = 1.0
+        self._pan_start = None
+        self._pan_moved = False
+        self._citation_targets = {}       # copilot citation tag -> citation info (clickable sources)
+        self._legend_open = True
+        self._legend_sig = None
+        self._pending_labels = []
 
         self.setup_styles()
         self.setup_menu()
         self.setup_layout()
         self.ai = InvestigationAI(self)
+        self._refresh_cost_panel()
         self._refresh_anomalies()
         self.redraw_canvas()
         self.root.after(250, self._check_ai_status_async)
@@ -4029,17 +4195,6 @@ class CriminalNetworkAnalyst:
         town_menu.add_command(label="Town Database Status", command=lambda: messagebox.showinfo("Town Registry",f"{self.town.count():,} citizens stored persistently.\nDatabase: {self.town.path}"))
         menubar.add_cascade(label="Town Database", menu=town_menu)
 
-        # NEO4J MENU
-        neo4j_menu = tk.Menu(menubar, tearoff=0)
-        neo4j_menu.add_command(label="Connect to Neo4j...", command=self.neo4j_connect_dialog)
-        neo4j_menu.add_command(label="Disconnect", command=self.neo4j_disconnect)
-        neo4j_menu.add_separator()
-        neo4j_menu.add_command(label="Push Current Graph to Neo4j", command=self.neo4j_push_graph)
-        neo4j_menu.add_command(label="Load Graph from Neo4j (replaces current)", command=self.neo4j_load_graph)
-        neo4j_menu.add_separator()
-        neo4j_menu.add_command(label="Clear Neo4j Database", command=self.neo4j_clear_remote)
-        menubar.add_cascade(label="Neo4j", menu=neo4j_menu)
-
         # ANALYSIS MENU
         analysis_menu = tk.Menu(menubar, tearoff=0)
         analysis_menu.add_command(label="Calculate Centrality (Key Players)", command=self.analyze_influencers)
@@ -4064,81 +4219,68 @@ class CriminalNetworkAnalyst:
         view_menu.add_command(label="Focus Top 20 Nodes", command=lambda: self.set_graph_focus(20))
         view_menu.add_command(label="Focus Top 40 Nodes", command=lambda: self.set_graph_focus(40))
         view_menu.add_separator()
-        view_menu.add_command(label="Auto Layout", command=self.auto_layout)
-        view_menu.add_separator()
-        view_menu.add_command(label="Spread Layout", command=self.auto_layout)
+        view_menu.add_command(label="Hierarchy Layout (most connected on top)", command=lambda: self.set_layout_mode("hierarchy"))
+        view_menu.add_command(label="Network Layout (force-directed)", command=lambda: self.set_layout_mode("network"))
+        view_menu.add_command(label="Re-run Current Layout", command=self.auto_layout)
+        view_menu.add_command(label="Reset View (centre, 1:1)", command=self.reset_view)
         menubar.add_cascade(label="View", menu=view_menu)
 
         self.root.config(menu=menubar)
 
     def setup_layout(self):
+        # --- STATUS BAR (bottom of the window; the status text used to be tracked but never shown) ---
+        self.status_var = tk.StringVar(value=STATUS_READY)
+        self.status_bar = tk.Frame(self.root, bg="#2b2b2b")
+        self.status_bar.pack(side=tk.BOTTOM, fill=tk.X)
+        tk.Label(self.status_bar, textvariable=self.status_var, anchor="w", bg="#2b2b2b", fg="#f0f0f0",
+                 font=UI_FONT, padx=8, pady=3).pack(side=tk.LEFT, fill=tk.X, expand=True)
+        self.ai_status_label = tk.Label(self.status_bar, textvariable=self.ai_status_var, bg="#2b2b2b",
+                                        fg="#ffd166", font=UI_FONT_BOLD, padx=8, pady=3)
+        self.ai_status_label.pack(side=tk.RIGHT)
+        tk.Label(self.status_bar, textvariable=self.ai_model_label_var, bg="#2b2b2b", fg="#9aa5b1",
+                 font=UI_FONT, pady=3).pack(side=tk.RIGHT)
+        self.ai_status_var.trace_add("write", lambda *_: self._recolor_ai_status())
+        self._recolor_ai_status()
+
         # --- LEFT PANEL: Entity Toolbox ---
-        self.left_panel = tk.Frame(self.root, width=200, bg="#d9d9d9", relief=tk.RAISED, bd=1)
+        self.left_panel = tk.Frame(self.root, width=200, bg=UI_BG, relief=tk.RAISED, bd=1)
         self.left_panel.pack(side=tk.LEFT, fill=tk.Y)
 
-        tk.Label(self.left_panel, text="ENTITY TOOLBOX", bg="#404040", fg="white",
-                 font=("Arial", 10, "bold")).pack(fill=tk.X)
-
-        entities = [
-            ("Suspect", "#ff9999"),
-            ("Phone Number", "#99ff99"),
-            ("Bank Account", "#9999ff"),
-            ("Vehicle", "#ffff99"),
-            ("Location", "#ff99ff"),
-            ("Organization", "#ffcc66"),
-            ("Case/FIR", "#cccccc"),
-        ]
-
-        for name, color in entities:
-            btn = tk.Button(self.left_panel, text=f"+ Add {name}", bg=color, relief=tk.GROOVE,
-                             command=lambda n=name: self.add_new_entity_at_center(n))
-            btn.pack(fill=tk.X, padx=10, pady=3)
-
-        tk.Label(self.left_panel, text="FIND ENTITY", bg="#404040", fg="white",
-                 font=("Arial", 10, "bold")).pack(fill=tk.X, pady=(9, 0))
+        self._section(self.left_panel, "FIND ENTITY", pady=0)
         self.search_var = tk.StringVar()
         search_entry = tk.Entry(self.left_panel, textvariable=self.search_var)
-        search_entry.pack(fill=tk.X, padx=10, pady=5)
+        search_entry.pack(fill=tk.X, padx=UI_PADX, pady=UI_PADY + 2)
         search_entry.bind("<Return>", lambda e: self.find_entity(self.search_var.get()))
-        tk.Button(self.left_panel, text="Search", command=lambda: self.find_entity(self.search_var.get())).pack(
-            fill=tk.X, padx=10)
+        self._btn(self.left_panel, "Search", lambda: self.find_entity(self.search_var.get())).pack(
+            fill=tk.X, padx=UI_PADX, pady=UI_PADY)
 
-        tk.Label(self.left_panel, text="DATA IN", bg="#404040", fg="white",
-                 font=("Arial", 10, "bold")).pack(fill=tk.X, pady=(9, 0))
-        tk.Button(self.left_panel, text="Import Relationships (CSV)",
-                  command=self.import_relationships_csv).pack(fill=tk.X, padx=10, pady=(5, 2))
-        tk.Button(self.left_panel, text="Import Entities (CSV)",
-                  command=self.import_entities_csv).pack(fill=tk.X, padx=10, pady=2)
-        tk.Button(self.left_panel, text="Upload Handwritten FIR",
-                  bg="#66cccc", command=self.upload_fir).pack(fill=tk.X, padx=10, pady=2)
+        self._section(self.left_panel, "DATA IN")
+        self._btn(self.left_panel, "Import Relationships (CSV)", self.import_relationships_csv).pack(
+            fill=tk.X, padx=UI_PADX, pady=UI_PADY)
+        self._btn(self.left_panel, "Import Entities (CSV)", self.import_entities_csv).pack(
+            fill=tk.X, padx=UI_PADX, pady=UI_PADY)
+        self._btn(self.left_panel, "Upload Handwritten FIR", self.upload_fir, kind="primary").pack(
+            fill=tk.X, padx=UI_PADX, pady=UI_PADY)
 
-        tk.Label(self.left_panel, text="MODE", bg="#404040", fg="white",
-                 font=("Arial", 10, "bold")).pack(fill=tk.X, pady=(9, 0))
+        self._build_case_files_panel()
 
+        # Hidden: the path-finding analysis still switches modes through this variable.
         self.mode_var = tk.StringVar(value="select")
-        tk.Radiobutton(self.left_panel, text="Select / Drag", variable=self.mode_var, value="select",
-                       command=lambda: self.set_mode("select"), bg="#d9d9d9", anchor="w").pack(fill=tk.X, padx=10)
-        tk.Radiobutton(self.left_panel, text="Create Link", variable=self.mode_var, value="link",
-                       command=lambda: self.set_mode("link"), bg="#d9d9d9", anchor="w").pack(fill=tk.X, padx=10)
 
-        tk.Label(self.left_panel, text="LINK PREDICTION", bg="#404040", fg="white",
-                 font=("Arial", 10, "bold")).pack(fill=tk.X, pady=(9, 0))
-        tk.Button(self.left_panel, text="Run Link Prediction", bg="#66cccc",
-                  command=self.run_link_prediction).pack(fill=tk.X, padx=10, pady=4)
+        self._section(self.left_panel, "LINK PREDICTION")
+        self._btn(self.left_panel, "Run Link Prediction", self.run_link_prediction, kind="primary").pack(
+            fill=tk.X, padx=UI_PADX, pady=UI_PADY)
 
         # Independent section for visibility controls; never mix with DATA IN.
-        tk.Label(self.left_panel, text="PANEL VISIBILITY", bg="#404040", fg="white",
-                 font=("Arial", 10, "bold")).pack(fill=tk.X, pady=(9, 0))
+        self._section(self.left_panel, "PANEL VISIBILITY")
         self.inspector_visible = True
         self.ai_panel_visible = True
-        self.toggle_inspector_btn = tk.Button(
-            self.left_panel, text="Hide Inspector", command=self.toggle_inspector,
-            bg="#bbbbbb")
-        self.toggle_inspector_btn.pack(fill=tk.X, padx=10, pady=(5, 2))
-        self.toggle_ai_btn = tk.Button(
-            self.left_panel, text="Hide AI Copilot", command=self.toggle_ai_copilot,
-            bg="#bbbbbb")
-        self.toggle_ai_btn.pack(fill=tk.X, padx=10, pady=(2, 5))
+        self.toggle_inspector_btn = self._btn(self.left_panel, "Hide Inspector", self.toggle_inspector, kind="quiet")
+        self.toggle_inspector_btn.pack(fill=tk.X, padx=UI_PADX, pady=UI_PADY)
+        self.toggle_ai_btn = self._btn(self.left_panel, "Hide AI Copilot", self.toggle_ai_copilot, kind="quiet")
+        self.toggle_ai_btn.pack(fill=tk.X, padx=UI_PADX, pady=UI_PADY)
+
+        self._build_cost_panel(self.left_panel)      # pinned to the bottom of the left panel
 
         # --- RIGHT PANEL: AI Copilot (vertical) ---
         # AI Copilot occupies the full-height right side.
@@ -4163,21 +4305,22 @@ class CriminalNetworkAnalyst:
         self.inspector_tab.pack(side=tk.BOTTOM, fill=tk.X)
         self.inspector_tab.pack_propagate(False)
 
-        tk.Label(self.inspector_tab, text="PROPERTY INSPECTOR", bg="#404040", fg="white",
-                 font=("Arial", 10, "bold")).pack(fill=tk.X)
-        self.prop_tree = ttk.Treeview(self.inspector_tab, columns=("Property", "Value"), show="headings")
+        self._section(self.inspector_tab, "PROPERTY INSPECTOR", pady=0)
+        tree_wrap = tk.Frame(self.inspector_tab, bg=UI_BG)
+        tree_wrap.pack(fill=tk.BOTH, expand=True)
+        self.prop_tree = ttk.Treeview(tree_wrap, columns=("Property", "Value"), show="headings")
+        tree_scroll = ttk.Scrollbar(tree_wrap, orient="vertical", command=self.prop_tree.yview)
+        self.prop_tree.configure(yscrollcommand=tree_scroll.set)
+        tree_scroll.pack(side=tk.RIGHT, fill=tk.Y)
         self.prop_tree.heading("Property", text="Property")
         self.prop_tree.heading("Value", text="Value")
         self.prop_tree.column("Property", width=180, minwidth=140, stretch=False)
         self.prop_tree.column("Value", width=700, minwidth=250, stretch=True)
-        self.prop_tree.pack(fill=tk.BOTH, expand=True)
+        self.prop_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
-        tk.Button(self.inspector_tab, text="Delete Selected Entity", bg="#ff6666",
-                  command=self.delete_selected_node).pack(fill=tk.X, padx=5, pady=5)
-
-        self.status_var = tk.StringVar(
-            value="No data loaded. Use File > Import Relationships (CSV) to begin, "
-                  "or add entities from the toolbox.")
+        self._btn(self.inspector_tab, "Delete Selected Entity", self.delete_selected_node, kind="danger").pack(
+            fill=tk.X, padx=UI_PADX, pady=UI_PADY + 2)
+        self.show_inspector_empty()
 
         self.canvas = tk.Canvas(center, bg="white", bd=2, relief=tk.SUNKEN, cursor="cross")
         self.canvas.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
@@ -4194,14 +4337,19 @@ class CriminalNetworkAnalyst:
                  width=12, sliderlength=18, variable=self.graph_zoom,
                  command=lambda _v: self.redraw_canvas(),
                  bg="#eef2f5", highlightthickness=0, bd=0).pack(padx=3)
-        tk.Button(zoom_overlay, text="1:1", font=("Arial", 7),
-                  command=lambda: self.graph_zoom.set(1.0),
-                  padx=2, pady=0).pack(fill=tk.X, padx=3, pady=(0, 3))
-        self.graph_zoom.trace_add("write", lambda *_: self.redraw_canvas())
+        zoom_reset = self._btn(zoom_overlay, "1:1", self.reset_view, kind="quiet")
+        zoom_reset.configure(font=("Arial", 7), padx=2, pady=0)
+        zoom_reset.pack(fill=tk.X, padx=3, pady=(0, 3))
+        self.graph_zoom.trace_add("write", lambda *_: self._on_zoom_changed())
 
         # Compact focus control: visible graph only; full investigation stays intact.
         focus_bar = tk.Frame(self.canvas, bg="#eef2f5", bd=1, relief=tk.RIDGE)
         focus_bar.place(relx=1.0, x=-12, y=10, anchor="ne")
+        tk.Label(focus_bar, text="LAYOUT", bg="#eef2f5", font=("Arial", 7, "bold")).pack(side=tk.LEFT, padx=4)
+        self.layout_menu = ttk.Combobox(focus_bar, width=10, state="readonly", values=("Hierarchy", "Network"))
+        self.layout_menu.set("Hierarchy" if self.layout_mode == "hierarchy" else "Network")
+        self.layout_menu.pack(side=tk.LEFT, padx=(3, 10), pady=3)
+        self.layout_menu.bind("<<ComboboxSelected>>", lambda _e: self.set_layout_mode(self.layout_menu.get()))
         tk.Label(focus_bar, text="GRAPH FOCUS", bg="#eef2f5", font=("Arial", 7, "bold")).pack(side=tk.LEFT, padx=4)
         self.focus_menu = ttk.Combobox(focus_bar, width=9, state="readonly",
                                         values=("Top 10", "Top 20", "Top 40", "All nodes"))
@@ -4209,6 +4357,9 @@ class CriminalNetworkAnalyst:
         self.focus_menu.pack(side=tk.LEFT, padx=3, pady=3)
         self.focus_menu.bind("<<ComboboxSelected>>", lambda _e: self.set_graph_focus(
             {"Top 10": 10, "Top 20": 20, "Top 40": 40, "All nodes": 0}[self.focus_menu.get()]))
+
+        self._build_welcome_panel()
+        self._build_legend()
 
         self.canvas.bind("<ButtonPress-1>", self.on_canvas_click)
         self.canvas.bind("<B1-Motion>", self.on_canvas_drag)
@@ -4221,7 +4372,7 @@ class CriminalNetworkAnalyst:
         self.canvas.bind("<Button-5>", self.on_graph_mousewheel)
 
     def on_graph_mousewheel(self, event):
-        """Zoom the graph using the mouse wheel, synchronized with the slider."""
+        """Zoom the graph with the mouse wheel, towards the cursor (the point under the pointer stays put)."""
         if getattr(event, "num", None) == 4:
             direction = 1
         elif getattr(event, "num", None) == 5:
@@ -4232,10 +4383,538 @@ class CriminalNetworkAnalyst:
                 return "break"
             direction = 1 if delta > 0 else -1
         current = float(self.graph_zoom.get())
-        new_zoom = round(min(2.5, max(0.35, current + 0.1 * direction)), 2)
+        new_zoom = round(min(2.5, max(0.35, current * (1.15 if direction > 0 else 1 / 1.15))), 3)
         if new_zoom != current:
-            self.graph_zoom.set(new_zoom)
+            sx, sy = self._event_xy(event)
+            cx, cy = self._view_center()
+            ox, oy = self._view_off
+            k = new_zoom / current
+            self._view_off = [(sx - cx) - (sx - cx - ox) * k, (sy - cy) - (sy - cy - oy) * k]
+            self._view_zoom_prev = new_zoom          # the offset is already right: _on_zoom_changed must not rescale it
+            self.graph_zoom.set(new_zoom)            # trace -> redraw
         return "break"
+
+    # ---- view transform: screen = centre + (world - centre) * zoom + pan ----
+    def _view_center(self):
+        return self.canvas.winfo_width() / 2.0, self.canvas.winfo_height() / 2.0
+
+    def _event_xy(self, event):
+        """Pointer position in canvas coordinates (screen coordinates are used when available: the wheel event on
+        Windows is not always relative to the canvas)."""
+        try:
+            xr = getattr(event, "x_root", None)
+            if xr is not None:
+                return xr - self.canvas.winfo_rootx(), event.y_root - self.canvas.winfo_rooty()
+        except Exception:
+            pass
+        return event.x, event.y
+
+    def _world_to_screen(self, x, y):
+        cx, cy = self._view_center()
+        z = float(self.graph_zoom.get())
+        return cx + (x - cx) * z + self._view_off[0], cy + (y - cy) * z + self._view_off[1]
+
+    def _screen_to_world(self, sx, sy):
+        cx, cy = self._view_center()
+        z = float(self.graph_zoom.get())
+        return cx + (sx - cx - self._view_off[0]) / z, cy + (sy - cy - self._view_off[1]) / z
+
+    def _on_zoom_changed(self):
+        """Slider / programmatic zoom: keep whatever is at the centre of the canvas where it is."""
+        z = float(self.graph_zoom.get())
+        prev = self._view_zoom_prev or 1.0
+        if abs(z - prev) > 1e-9:
+            self._view_off = [self._view_off[0] * z / prev, self._view_off[1] * z / prev]
+            self._view_zoom_prev = z
+        self.redraw_canvas()
+
+    def reset_view(self):
+        self._view_off = [0.0, 0.0]
+        self._view_zoom_prev = 1.0
+        self.graph_zoom.set(1.0)
+        self.redraw_canvas()
+
+    def _begin_pan(self, event):
+        self._pan_start = (event.x, event.y, self._view_off[0], self._view_off[1])
+        self._pan_moved = False
+
+    # ========================== UI POLISH HELPERS ==========================
+    def _btn(self, parent, text, command, kind="neutral", bg=None):
+        """One button style everywhere: kind = primary | neutral | quiet | danger (or an explicit bg)."""
+        colour = bg or {"primary": UI_PRIMARY, "neutral": UI_NEUTRAL, "quiet": UI_QUIET,
+                        "danger": UI_DANGER}.get(kind, UI_NEUTRAL)
+        return tk.Button(parent, text=text, command=command, bg=colour, activebackground=colour,
+                         relief=tk.GROOVE, bd=1, font=UI_FONT, cursor="hand2")
+
+    def _section(self, parent, text, pady=9):
+        """Dark section header bar; returns the label (already packed)."""
+        lab = tk.Label(parent, text=text, bg=UI_HEAD_BG, fg=UI_HEAD_FG, font=UI_HEAD_FONT)
+        lab.pack(fill=tk.X, pady=(pady, 0))
+        return lab
+
+    def _recolor_ai_status(self):
+        lab = getattr(self, "ai_status_label", None)
+        if lab is None:
+            return
+        text = str(self.ai_status_var.get())
+        lab.configure(fg="#7ddc8c" if text.startswith("●") else "#ff8a80" if text.startswith("○") else "#ffd166")
+
+    def show_inspector_empty(self):
+        """Clear the inspector and say what it is for (used whenever nothing is selected)."""
+        self.clear_inspector()
+        self.prop_tree.insert("", tk.END, values=("Nothing selected",
+                              "Click an entity or a relationship in the graph to see its properties, centrality and sources here."))
+
+    def _ensure_inspector_visible(self):
+        if not self.inspector_visible:
+            self.inspector_tab.pack(side=tk.BOTTOM, fill=tk.X)
+            self.inspector_visible = True
+            self.toggle_inspector_btn.config(text="Hide Inspector")
+
+    # ---- MODEL COST card (top of the right-hand panel): session total and the latest request ----
+    def _build_cost_panel(self, parent):
+        self.cost_frame = tk.Frame(parent, bg=UI_BG)
+        self.cost_frame.pack(side=tk.BOTTOM, fill=tk.X, pady=(0, 6))
+        self._section(self.cost_frame, "MODEL COST", pady=0)
+        body = tk.Frame(self.cost_frame, bg="white", bd=1, relief=tk.SOLID, cursor="hand2")
+        body.pack(fill=tk.X, padx=UI_PADX, pady=(6, 2))
+        self.cost_session_var, self.cost_session_sub = tk.StringVar(value="$0.0000"), tk.StringVar(value="no AI calls yet")
+        self.cost_last_var, self.cost_last_sub = tk.StringVar(value="—"), tk.StringVar(value="no request yet")
+        widgets = [body]
+        for n, (caption, big, sub) in enumerate((("THIS SESSION", self.cost_session_var, self.cost_session_sub),
+                                                 ("LAST REQUEST", self.cost_last_var, self.cost_last_sub))):
+            if n:
+                widgets.append(tk.Frame(body, height=1, bg="#e5e7eb"))
+                widgets[-1].pack(fill=tk.X, padx=8)
+            blk = tk.Frame(body, bg="white")
+            blk.pack(fill=tk.X, padx=8, pady=3)
+            c1 = tk.Label(blk, text=caption, bg="white", fg="#777777", font=("Arial", 7, "bold"), anchor="w")
+            c2 = tk.Label(blk, textvariable=big, bg="white", fg="#184e77", font=("Arial", 14, "bold"), anchor="w")
+            c3 = tk.Label(blk, textvariable=sub, bg="white", fg="#777777", font=("Arial", 8), anchor="w")
+            for c in (c1, c2, c3):
+                c.pack(fill=tk.X)
+            widgets += [blk, c1, c2, c3]
+        tk.Label(self.cost_frame, text="Click for the per-model breakdown. Prices are estimates.",
+                 bg=UI_BG, fg="#666666", font=("Arial", 7), anchor="w", justify=tk.LEFT, wraplength=180).pack(fill=tk.X, padx=UI_PADX, pady=(0, 2))
+        for w in widgets:
+            w.bind("<Button-1>", lambda _e: self.show_ai_usage())
+
+    def _refresh_cost_panel(self):
+        backend = getattr(getattr(self, "ai", None), "backend", None)
+        if backend is None or not hasattr(backend, "usage_cost") or not hasattr(self, "cost_session_var"):
+            return
+        entries = backend.usage_entries()
+        cost, tokens = backend.usage_cost(since=0)
+        lcost, ltokens = backend.usage_cost(since=min(self._cost_mark, len(entries)))
+        since = len(entries) - min(self._cost_mark, len(entries))
+        money = lambda c, n: "$0.0000" if n == 0 else ("n/a" if c is None else f"${c:.4f}")
+        self.cost_session_var.set(money(cost, len(entries)))
+        self.cost_session_sub.set("no AI calls yet" if not entries else f"{tokens:,} tokens · {len(entries)} call(s)")
+        self.cost_last_var.set("—" if since == 0 else money(lcost, since))
+        self.cost_last_sub.set("no request yet" if since == 0 else f"{ltokens:,} tokens · {since} call(s)")
+
+    # ---- CASE FILES (left panel): the FIRs and data files currently loaded ----
+    def _build_case_files_panel(self):
+        self._section(self.left_panel, "CASE FILES")
+        wrap = tk.Frame(self.left_panel, bg=UI_BG)
+        wrap.pack(fill=tk.X, padx=UI_PADX, pady=UI_PADY)
+        self.case_files_list = tk.Listbox(wrap, height=7, font=("Arial", 8), activestyle="none", exportselection=False,
+                                          bg="white", relief=tk.SOLID, bd=1, selectbackground="#cfe8e8", selectforeground="#111111")
+        self.case_files_list.pack(fill=tk.X)
+        self.case_files_list.bind("<<ListboxSelect>>", lambda _e: self._on_case_file_select())
+        self.case_files_hint = tk.Label(wrap, text="", bg=UI_BG, fg="#555555", font=("Arial", 8), anchor="w",
+                                        justify=tk.LEFT, wraplength=180)
+        self.case_files_hint.pack(fill=tk.X, pady=(2, 0))
+        self._refresh_case_files(force=True)
+
+    def _case_file_entries(self):
+        rows = []
+        done = set()
+        for doc in getattr(self.evidence_store, "fir_documents", []):
+            nm = Path(str(doc.get("file", ""))).name
+            done.add(nm)
+            rows.append({"kind": "FIR", "name": nm, "state": "ok", "detail": f"{len(doc.get('entities', []))} entities"})
+        for nm, state in self._fir_inflight.items():
+            if nm not in done:
+                rows.append({"kind": "FIR", "name": nm, "state": state, "detail": ""})
+        counts = {}
+        for _u, _v, d in self.G.edges(data=True):
+            for rec in d.get("records", []):
+                f = str(rec.get("_source_file") or rec.get("source_file") or "")
+                if f:
+                    counts[f] = counts.get(f, 0) + 1
+        for _n, d in self.G.nodes(data=True):
+            f = str(d.get("properties", {}).get("_source_file", ""))
+            if f:
+                counts[f] = counts.get(f, 0) + 1
+        for f, n in sorted(counts.items()):
+            rows.append({"kind": "CSV", "name": f, "state": "ok", "detail": f"{n} rows"})
+        return rows
+
+    def _refresh_case_files(self, force=False):
+        if not hasattr(self, "case_files_list"):
+            return
+        sig = (len(getattr(self.evidence_store, "fir_documents", [])), self.G.number_of_nodes(),
+               self.G.number_of_edges(), tuple(sorted(self._fir_inflight.items())))
+        if sig == self._case_files_sig and not force:
+            return
+        self._case_files_sig = sig
+        rows = self._case_file_entries()
+        self._case_file_rows = rows
+        self.case_files_list.delete(0, tk.END)
+        mark = {"ok": "✓", "processing": "…", "failed": "✗"}
+        for r in rows:
+            nm = r["name"] if len(r["name"]) <= 24 else r["name"][:23] + "…"
+            self.case_files_list.insert(tk.END, f"{mark.get(r['state'], '?')} {r['kind']}  {nm}")
+        firs = sum(1 for r in rows if r["kind"] == "FIR")
+        self.case_files_hint.configure(
+            text=(f"{firs} FIR(s), {len(rows) - firs} data file(s). Click one to inspect it." if rows
+                  else "No files loaded yet. Use DATA IN above, or File > Upload FIR."))
+
+    def _on_case_file_select(self):
+        sel = self.case_files_list.curselection()
+        if not sel or sel[0] >= len(self._case_file_rows):
+            return
+        r = self._case_file_rows[sel[0]]
+        if r["state"] == "processing":
+            self.status_var.set(f"{r['name']} is still being processed.")
+            return
+        if r["state"] == "failed":
+            self.status_var.set(f"{r['name']} could not be processed. Upload it again to retry.")
+            return
+        self.show_citation_in_inspector({"status": "ok", "file": r["name"], "row": None, "label": r["name"]})
+
+    # ---- first-run welcome panel (child of the canvas, so canvas.delete('all') never removes it) ----
+    def _build_welcome_panel(self):
+        f = tk.Frame(self.canvas, bg="white", bd=1, relief=tk.SOLID, padx=26, pady=18)
+        self.welcome_frame = f
+        tk.Label(f, text="Welcome to PSCYPHER", bg="white", fg="#184e77", font=("Arial", 16, "bold")).pack(anchor="w")
+        tk.Label(f, text="Criminal-network analysis for FIRs, call records and payments. The workflow has three steps:",
+                 bg="white", fg="#444444", font=("Arial", 10), wraplength=520, justify=tk.LEFT).pack(anchor="w", pady=(2, 10))
+        steps = [
+            ("1", "Add your case data",
+             "Use the File menu to import relationship or entity CSV files, or upload a scanned FIR. "
+             "People, phones and accounts appear as a graph, with the most connected entities at the top."),
+            ("2", "Select an entity",
+             "Click any node. It and its links stay in colour while the rest fades back, and its properties, "
+             "score, anomalies and source records appear in the Property Inspector."),
+            ("3", "Ask the copilot",
+             "Type a question in the AI Copilot panel, for example \u201cWhich entities connect these cases?\u201d "
+             "Every cited file and row is checked, and a verified citation opens that record in the Property Inspector."),
+        ]
+        for num, title, body in steps:
+            row = tk.Frame(f, bg="white")
+            row.pack(fill=tk.X, pady=4)
+            tk.Label(row, text=num, bg=UI_PRIMARY, fg="#102a43", font=("Arial", 12, "bold"), width=3).pack(
+                side=tk.LEFT, anchor="n", padx=(0, 10))
+            col = tk.Frame(row, bg="white")
+            col.pack(side=tk.LEFT, fill=tk.X, expand=True)
+            tk.Label(col, text=title, bg="white", fg="#111111", font=("Arial", 11, "bold"), anchor="w").pack(fill=tk.X)
+            tk.Label(col, text=body, bg="white", fg="#555555", font=("Arial", 9), anchor="w",
+                     wraplength=440, justify=tk.LEFT).pack(fill=tk.X)
+        tk.Label(f, text="Scores and anomalies are investigative leads, not evidence of guilt.",
+                 bg="white", fg="#888888", font=("Arial", 8)).pack(anchor="w", pady=(12, 0))
+
+    def _update_welcome_panel(self):
+        f = getattr(self, "welcome_frame", None)
+        if f is None:
+            return
+        if not self.G.nodes:
+            f.place(relx=0.5, rely=0.46, anchor="center")
+            f.lift()
+        else:
+            f.place_forget()
+
+    # ---- legend: node colours (type or community) and relation colours ----
+    def _build_legend(self):
+        self.legend_frame = tk.Frame(self.canvas, bg="#f7f9fb", bd=1, relief=tk.RIDGE)
+        head = tk.Frame(self.legend_frame, bg="#f7f9fb", cursor="hand2")
+        head.pack(fill=tk.X)
+        self.legend_title = tk.Label(head, text="LEGEND", bg="#f7f9fb", font=("Arial", 8, "bold"), cursor="hand2")
+        self.legend_title.pack(side=tk.LEFT, padx=(8, 14), pady=3)
+        self.legend_toggle = tk.Label(head, text="▾ Hide", bg="#f7f9fb", fg="#184e77", font=("Arial", 8, "bold"), cursor="hand2")
+        self.legend_toggle.pack(side=tk.RIGHT, padx=8, pady=3)
+        for w in (head, self.legend_title, self.legend_toggle):     # the whole header is the click target
+            w.bind("<Button-1>", lambda _e: self._toggle_legend())
+        self.legend_body = tk.Frame(self.legend_frame, bg="#f7f9fb")
+        self.legend_body.pack(fill=tk.X, padx=8, pady=(0, 6))
+
+    def _toggle_legend(self):
+        self._legend_open = not self._legend_open
+        self._legend_sig = None
+        self._update_legend()
+        return "break"
+
+    @staticmethod
+    def _community_name(idx):
+        """Communities are shown 1, 2, 3 ... (the stored ids are 0-based)."""
+        return f"Community {idx + 1}" if isinstance(idx, int) else f"Community {idx}"
+
+    def _legend_entries(self, visible):
+        node_rows, by_comm, rel_rows, seen_types = [], {}, {}, {}
+        for n, d in self.G.nodes(data=True):
+            if n not in visible:
+                continue
+            if "community" in d:
+                by_comm[d["community"]] = self.community_palette[d["community"] % len(self.community_palette)]
+            else:
+                t = str(d.get("type", "Entity"))
+                seen_types[t] = d.get("color") or self.get_color(t)
+        for t, c in sorted(seen_types.items()):
+            node_rows.append((t, c))
+        ordered = sorted(by_comm, key=lambda k: (str(type(k)), k))
+        for idx in ordered[:6]:
+            node_rows.append((self._community_name(idx), by_comm[idx]))
+        if len(ordered) > 6:
+            node_rows.append((f"+{len(ordered) - 6} more communities", "#ffffff"))
+        for u, v, d in self.G.edges(data=True):
+            if u in visible and v in visible:
+                rel = str(d.get("label", "Linked to"))
+                rel_rows[rel] = self._relation_color(rel)
+        return node_rows, sorted(rel_rows.items()), bool(by_comm)
+
+    def _update_legend(self):
+        frame = getattr(self, "legend_frame", None)
+        if frame is None:
+            return
+        if not self.G.nodes:
+            frame.place_forget()
+            return
+        node_rows, rel_rows, communities = self._legend_entries(self._visible_graph_nodes())
+        sig = (tuple(node_rows), tuple(rel_rows), self._legend_open)
+        if sig != self._legend_sig:
+            self._legend_sig = sig
+            self.legend_toggle.configure(text="▾ Hide" if self._legend_open else "▸ Show")
+            for w in self.legend_body.winfo_children():
+                w.destroy()
+            if self._legend_open:
+                self.legend_body.pack(fill=tk.X, padx=8, pady=(0, 6))
+                tk.Label(self.legend_body, text="Node colour = community" if communities else "Node colour = entity type",
+                         bg="#f7f9fb", fg="#555555", font=("Arial", 8, "italic")).pack(anchor="w")
+                for text, colour in node_rows:
+                    r = tk.Frame(self.legend_body, bg="#f7f9fb")
+                    r.pack(anchor="w")
+                    tk.Label(r, text="  ", bg=colour, relief=tk.SOLID, bd=1).pack(side=tk.LEFT, padx=(0, 6), pady=1)
+                    tk.Label(r, text=text, bg="#f7f9fb", font=("Arial", 8)).pack(side=tk.LEFT)
+                tk.Label(self.legend_body, text="Line colour = relationship", bg="#f7f9fb", fg="#555555",
+                         font=("Arial", 8, "italic")).pack(anchor="w", pady=(6, 0))
+                for text, colour in (rel_rows or [("(no relationships yet)", "#999999")]):
+                    r = tk.Frame(self.legend_body, bg="#f7f9fb")
+                    r.pack(anchor="w")
+                    tk.Label(r, text="——", fg=colour, bg="#f7f9fb", font=("Arial", 8, "bold")).pack(side=tk.LEFT, padx=(0, 6))
+                    tk.Label(r, text=text, bg="#f7f9fb", font=("Arial", 8)).pack(side=tk.LEFT)
+                tk.Label(self.legend_body, text="Thicker line = more observations · dashed = predicted link",
+                         bg="#f7f9fb", fg="#777777", font=("Arial", 7)).pack(anchor="w", pady=(6, 0))
+                tk.Label(self.legend_body, text="Select a node to highlight it and its links",
+                         bg="#f7f9fb", fg="#777777", font=("Arial", 7)).pack(anchor="w")
+            else:
+                self.legend_body.pack_forget()
+        frame.place(relx=0.0, rely=1.0, x=12, y=-12, anchor="sw")
+        frame.lift()
+
+    # ---- node labels: readable initials inside the circle, the full name in a rounded 'pill' underneath ----
+    def _draw_node_label(self, node_id, x, y, r, label, selected, dim=False, fill_colour="#cccccc"):
+        words = re.findall(r"[A-Za-z0-9]+", label)
+        initials = ("".join(w[0] for w in words[:2]) or label[:2]).upper()
+        self.canvas.create_text(x, y, text=initials, fill=UI_DIM_TEXT if dim else text_on(fill_colour),
+                                font=("Segoe UI", 10, "bold"), tags=(node_id, "entity"))  # type: ignore[arg-type]
+        shown = label if len(label) <= 26 else label[:25] + "…"
+        tid = self.canvas.create_text(x, y + r + 7, text=shown, anchor="n",
+                                      fill=UI_DIM_TEXT if dim else "#1f2933",
+                                      font=("Segoe UI", 10, "bold" if selected else "normal"),
+                                      tags=(node_id, "entity"))  # type: ignore[arg-type]
+        self._pending_labels.append((tid, node_id, selected, dim, fill_colour))
+
+    def _back_node_labels(self):
+        """Draw each name's rounded pill behind its text. Done after zoom scaling (canvas.scale moves coordinates
+        but not font sizes), so the pill always matches the text."""
+        for tid, node_id, selected, dim, accent in self._pending_labels:
+            bb = self.canvas.bbox(tid)
+            if not bb:
+                continue
+            x1, y1, x2, y2 = bb[0] - 7, bb[1] - 2, bb[2] + 7, bb[3] + 2
+            rad = min((y2 - y1) / 2.0, 10.0)
+            pts = [x1 + rad, y1, x2 - rad, y1, x2, y1, x2, y1 + rad, x2, y2 - rad, x2, y2, x2 - rad, y2,
+                   x1 + rad, y2, x1, y2, x1, y2 - rad, x1, y1 + rad, x1, y1]
+            if selected:
+                fill, line, lw = "#fff3cd", "#e67e22", 2
+            elif dim:
+                fill, line, lw = "#f4f5f7", UI_DIM_NODE_LINE, 1
+            else:
+                fill, line, lw = "white", accent, 2
+            pill = self.canvas.create_polygon(*pts, smooth=True, fill=fill, outline=line, width=lw,
+                                              tags=(node_id, "entity"))  # type: ignore[arg-type]
+            self.canvas.tag_lower(pill, tid)
+        self._pending_labels = []
+
+    # ---- layout: most connected entities on the top row, then tiers of decreasing connectivity ----
+    def _hierarchy_positions(self, nodes, w, h):
+        nodes = list(nodes)
+        if not nodes:
+            return {}
+        nodeset = set(nodes)
+        nbrs = {n: {m for m in self.G.neighbors(n) if m in nodeset and m != n} for n in nodes}
+        weight = {}
+        for n in nodes:
+            weight[n] = sum(max(1, int(d.get("count", 1) or 1)) for _a, m, d in self.G.edges(n, data=True)
+                            if m in nodeset and m != n)
+        name = lambda n: str(self.G.nodes[n].get("label", n)).casefold()
+        ranked = sorted(nodes, key=lambda n: (-len(nbrs[n]), -weight[n], name(n)))
+        # equal connectivity = same tier; if that gives too many tiers, split the ranking into five even ones
+        tiers, last = [], None
+        for n in ranked:
+            if last is None or len(nbrs[n]) != last:
+                tiers.append([])
+                last = len(nbrs[n])
+            tiers[-1].append(n)
+        if len(tiers) > 5:
+            size = int(math.ceil(len(ranked) / 5.0))
+            tiers = [ranked[i:i + size] for i in range(0, len(ranked), size)]
+        margin = 70.0
+        capacity = max(3, int((w - 2 * margin) // 120))
+        rows = []
+        for t in tiers:
+            for i in range(0, len(t), capacity):
+                rows.append(t[i:i + capacity])
+        # order each row by the average horizontal position of its neighbours in the rows above (fewer crossings)
+        frac = {}
+        for ri, row in enumerate(rows):
+            if ri > 0:
+                def bary(n, _ri=ri):
+                    xs = [frac[m] for m in nbrs[n] if m in frac]
+                    return sum(xs) / len(xs) if xs else 0.5
+                row.sort(key=lambda n: (bary(n), -len(nbrs[n]), name(n)))
+            for i, n in enumerate(row):
+                frac[n] = (i + 0.5) / len(row)
+        top, bottom = 60.0, 85.0
+        step = max(105.0, (h - top - bottom) / max(1, len(rows) - 1)) if len(rows) > 1 else 0.0
+        y0 = top if len(rows) > 1 else h / 2.0 - 30.0
+        pos = {}
+        for ri, row in enumerate(rows):
+            span = w - 2 * margin
+            for i, n in enumerate(row):
+                pos[n] = [margin + span * (i + 0.5) / len(row), y0 + ri * step]
+        return pos
+
+    def set_layout_mode(self, mode):
+        self.layout_mode = "network" if str(mode).lower().startswith("net") else "hierarchy"
+        if hasattr(self, "layout_menu"):
+            self.layout_menu.set("Hierarchy" if self.layout_mode == "hierarchy" else "Network")
+        self._focus_positions.clear()
+        self._view_off = [0.0, 0.0]
+        if self.layout_mode == "network":
+            self.node_positions = {}        # fresh force-directed layout, not the old hierarchy rows
+        self.auto_layout()
+        self.status_var.set("Hierarchy layout: the most connected entities are on the top row." if self.layout_mode == "hierarchy"
+                            else "Network layout: connected entities are pulled together.")
+
+    # ---- copilot answer rendering ----
+    def _append_ai_answer(self, text, header="✦ AI COPILOT"):
+        """Copilot answer: headline, evidence lines with confidence chips, caveat, and a slim verification footer.
+        Cited sources that exist in the loaded evidence are clickable chips (CSV row or FIR excerpt appears in the
+        Property Inspector); sources that do not exist are marked red. Free-form answers fall back to prose."""
+        body, tools, cite = split_saved_answer(str(text or ""))
+        chat = self.ai_chat
+        chat.configure(state="normal")
+        chat.insert("end", f"\n{header}:\n", "chat_header")
+        sa = parse_structured_answer(body)
+        if sa:
+            found = self._render_structured_answer(sa["headline"], sa["evidence"], sa["caveat"], other=sa["other"])
+        else:
+            found = self._insert_rich(body, cite=True)
+        self._insert_answer_footer(tools, cite, found)
+        chat.see("end")
+        chat.configure(state="disabled")
+
+    def _on_citation_click(self, tag):
+        info = self._citation_targets.get(tag)
+        if info:
+            self.show_citation_in_inspector(info)
+
+    def _find_csv_record(self, fname, row):
+        """(kind, payload) for the record behind 'fname row N', searched in link records then node properties."""
+        fl, rs = str(fname).lower(), str(row)
+        for u, v, d in self.G.edges(data=True):
+            for rec in d.get("records", []):
+                sf = str(rec.get("_source_file") or rec.get("source_file") or "").lower()
+                if sf == fl and str(rec.get("_row")) == rs:
+                    return "edge", (u, v, d, rec)
+        for n, d in self.G.nodes(data=True):
+            p = d.get("properties", {})
+            if str(p.get("_source_file", "")).lower() == fl and str(p.get("_row")) == rs:
+                return "node", (n, d, p)
+        return None, None
+
+    def show_citation_in_inspector(self, info):
+        """Show the CSV row / FIR excerpt behind a clicked citation in the Property Inspector."""
+        self._ensure_inspector_visible()
+        self.clear_inspector()
+        ins = lambda k, v: self.prop_tree.insert("", tk.END, values=(k, str(v)))
+        label, fname, row = info.get("label", ""), info.get("file", ""), info.get("row")
+        lab = lambda n: self.G.nodes[n].get("label", n) if n in self.G.nodes else str(n)
+        if info.get("status") != "ok":
+            ins("Citation", label)
+            ins("Status", "NOT FOUND in the loaded evidence. Treat any claim that relies on it as unverified.")
+            self.status_var.set(f"'{label}' is not in the loaded evidence.")
+            return
+        if row is not None and str(fname).lower().endswith(".csv"):
+            kind, payload = self._find_csv_record(fname, row)
+            ins("Source file", fname)
+            ins("Row", row)
+            if kind == "edge":
+                u, v, d, rec = payload
+                frm, to = rec.get("_directed_from", u), rec.get("_directed_to", v)
+                ins("Relationship", d.get("label", "Linked to"))
+                ins("Direction", f"{lab(frm)} → {lab(to)}")
+                for k, val in rec.items():
+                    if not str(k).startswith("_"):
+                        ins(k, val)
+                ins("Observations on this link", d.get("count", 1))
+            elif kind == "node":
+                n, d, p = payload
+                ins("Entity", f"{d.get('label', n)} ({d.get('type', 'Entity')})")
+                for k, val in p.items():
+                    if not str(k).startswith("_"):
+                        ins(k, val)
+            self.status_var.set(f"Showing {fname} row {row} in the Property Inspector.")
+            return
+        # a FIR transcription / PDF
+        name = Path(str(fname)).name.lower()
+        for doc in self.evidence_store.fir_documents:
+            dn = Path(str(doc.get("file", ""))).name.lower()
+            if name in (dn, Path(dn).stem + "_transcription.txt"):
+                import textwrap
+                flat = re.sub(r"\s+", " ", str(doc.get("text", ""))).strip()
+                focus = ""
+                if self.selected_node in self.G:
+                    focus = str(self.G.nodes[self.selected_node].get("label", "")).casefold()
+                at = flat.casefold().find(focus) if focus else -1
+                begin = max(0, at - 120) if at >= 0 else 0
+                ins("Source file", Path(str(doc.get("file", ""))).name)
+                ins("FIR id", doc.get("id", ""))
+                people = [str(e.get("value") or e.get("name") or "") for e in doc.get("entities", []) if isinstance(e, dict)]
+                if people:
+                    ins("People extracted", ", ".join(p for p in people if p))
+                ins("Note", "FIR text records unverified allegations, not findings.")
+                lines = textwrap.wrap(flat[begin:begin + 1100], width=120)[:10]
+                for i, ln in enumerate(lines):
+                    ins("Excerpt" if i == 0 else "", ln)
+                self.status_var.set(f"Showing an excerpt of {Path(str(doc.get('file', ''))).name} in the Property Inspector.")
+                return
+        # a CSV cited without a row number: summarise it
+        fl = str(fname).lower()
+        recs = []
+        for u, v, d in self.G.edges(data=True):
+            for rec in d.get("records", []):
+                if str(rec.get("_source_file") or "").lower() == fl:
+                    recs.append((rec.get("_row"), d.get("label", "Linked to"), rec.get("_directed_from", u), rec.get("_directed_to", v)))
+        ins("Source file", fname)
+        ins("Records loaded from it", len(recs))
+        for rw, rel, a, b in sorted(recs, key=lambda x: (str(type(x[0])), x[0]))[:8]:
+            ins(f"Row {rw}", f"{rel}: {lab(a)} → {lab(b)}")
+        if len(recs) > 8:
+            ins("", f"... and {len(recs) - 8} more. Cite a specific row (file row N) to see its full record.")
+        self.status_var.set(f"Showing a summary of {fname} in the Property Inspector.")
 
     # ========================== MODES ==========================
     def toggle_inspector(self):
@@ -4270,9 +4949,9 @@ class CriminalNetworkAnalyst:
         self.pending_first_node = None
         self.selected_node = None
         if mode == "select":
-            self.status_var.set("Mode: SELECT - click a node to inspect, drag to move")
+            self.status_var.set(STATUS_SELECT)
         elif mode == "link":
-            self.status_var.set("Mode: LINK - click the first entity, then the second entity")
+            self.status_var.set(STATUS_LINK)
         self.redraw_canvas()
 
     def enable_path_mode(self):
@@ -4281,7 +4960,7 @@ class CriminalNetworkAnalyst:
         self.mode = "path"
         self.mode_var.set("select")
         self.pending_first_node = None
-        self.status_var.set("Mode: PATH - click the start entity, then the destination entity")
+        self.status_var.set(STATUS_PATH)
         self.redraw_canvas()
 
     # ========================== GRAPH ENGINE ==========================
@@ -4673,6 +5352,12 @@ class CriminalNetworkAnalyst:
         w = max(self.canvas.winfo_width(), -10, 100)
         h = max(self.canvas.winfo_height(), -10, 100)
 
+        if self.layout_mode == "hierarchy":
+            self.node_positions = self._hierarchy_positions(list(self.G.nodes()), max(w, 640), max(h, 420))
+            self._focus_positions.clear()
+            self.redraw_canvas()
+            return
+
         if self.G.number_of_edges() == 0:
             self.node_positions = self._random_spread_positions(
                 list(self.G.nodes()), w, h
@@ -4744,13 +5429,12 @@ class CriminalNetworkAnalyst:
 
     def redraw_canvas(self, highlight_path=None):
         self.canvas.delete("all")
+        self._pending_labels = []
+        self._update_welcome_panel()
 
-        if len(self.G.nodes) == 0:
-            self.canvas.create_text(
-                self.canvas.winfo_width() // 2 or 500, 250,
-                text="No entities yet.\nUse File > Import Entities / Relationships (CSV),\n"
-                     "or add entities from the toolbox on the left.",
-                fill="#999999", font=("Arial", 12), justify="center")
+        if len(self.G.nodes) == 0:      # the welcome panel (a child widget of the canvas) is the empty state
+            self._update_legend()
+            self._refresh_case_files()
             return
 
         visible = self._visible_graph_nodes()
@@ -4787,6 +5471,8 @@ class CriminalNetworkAnalyst:
                     coords = [coords_by_node[nid] for nid in ordered]
                 self._focus_positions = {nid: [float(x), float(y)]
                                          for nid, (x, y) in zip(ordered, coords)}
+                if self.layout_mode == "hierarchy":
+                    self._focus_positions = self._hierarchy_positions(visible, width, height)
             positions = self._focus_positions
         else:
             positions = self.node_positions
@@ -4794,6 +5480,15 @@ class CriminalNetworkAnalyst:
         if highlight_path:
             for i in range(len(highlight_path) - 1):
                 highlight_edges.add(frozenset((highlight_path[i], highlight_path[i + 1])))
+
+        focus_id = self.selected_node if (not highlight_path and self.selected_node in visible
+                                          and self.selected_node in self.G) else None
+        focus_nbrs = set(self.G.neighbors(focus_id)) if focus_id is not None else set()
+
+        def node_dim(n):
+            if focus_id is None or n == focus_id:
+                return False
+            return True if UI_DIM_NEIGHBOURS else n not in focus_nbrs
 
         # Only DIFFERENT relation types are drawn as separate links. Repeated
         # observations of the same relation are represented by line thickness.
@@ -4804,126 +5499,147 @@ class CriminalNetworkAnalyst:
             pair = frozenset((u, v))
             pair_edges.setdefault(pair, []).append((u, v, key, data))
 
-        for pair, edge_list in pair_edges.items():
-            count = len(edge_list)
-            for idx, (u, v, key, data) in enumerate(edge_list):
-                x1, y1 = positions[u]
-                x2, y2 = positions[v]
+        def curve(u, v, idx, count):
+            """Points of a gentle quadratic curve from the rim of u to the rim of v (so lines never run over a node)."""
+            x1, y1 = positions[u]
+            x2, y2 = positions[v]
+            ru, rv = self.node_radius(self.G.nodes[u]), self.node_radius(self.G.nodes[v])
+            a, b = (positions[u], positions[v]) if str(u) <= str(v) else (positions[v], positions[u])
+            dx, dy = b[0] - a[0], b[1] - a[1]
+            length = max(math.hypot(dx, dy), 1.0)
+            px, py = -dy / length, dx / length       # same side for A->B and B->A, so parallel links fan out
+            bend = ((idx - (count - 1) / 2.0) * 0.22 + (0.09 if count == 1 else 0.0)) * length
+            c = ((x1 + x2) / 2.0 + px * bend, (y1 + y2) / 2.0 + py * bend)
 
-                is_path_edge = frozenset((u, v)) in highlight_edges
-                is_selected = self.selected_edge == (u, v, key)
+            def toward(p, q, rad):
+                ddx, ddy = q[0] - p[0], q[1] - p[1]
+                dd = max(math.hypot(ddx, ddy), 1.0)
+                return p[0] + ddx / dd * rad, p[1] + ddy / dd * rad
+            start, end = toward((x1, y1), c, ru + 1), toward((x2, y2), c, rv + 3)
+            pts = []
+            for k in range(17):
+                t = k / 16.0
+                w0, w1, w2 = (1 - t) ** 2, 2 * (1 - t) * t, t * t
+                pts += [w0 * start[0] + w1 * c[0] + w2 * end[0], w0 * start[1] + w1 * c[1] + w2 * end[1]]
+            return pts
 
-                # Different relation types get a small, controlled offset.
-                dx, dy = x2 - x1, y2 - y1
-                length = max((dx * dx + dy * dy) ** 0.5, 1.0)
-                px, py = -dy / length, dx / length
-                offset = (idx - (count - 1) / 2) * 7
-                ox, oy = px * offset, py * offset
+        def draw_edges(dim_pass):
+            for pair, edge_list in pair_edges.items():
+                count = len(edge_list)
+                for idx, (u, v, key, data) in enumerate(edge_list):
+                    if u == v:
+                        continue
+                    is_selected = self.selected_edge == (u, v, key)
+                    dim = focus_id is not None and focus_id not in (u, v) and not is_selected
+                    if dim != dim_pass:
+                        continue
+                    is_path_edge = frozenset((u, v)) in highlight_edges
+                    relation = data.get("label", "Linked to")
+                    fill = "#e53935" if is_path_edge else ("#ff9800" if is_selected else self._relation_color(relation))
 
-                relation = data.get("label", "Linked to")
-                fill = "#e53935" if is_path_edge else (
-                    "#ff9800" if is_selected else self._relation_color(relation)
-                )
+                    # Same-relation records are aggregated; thickness encodes count (kept thin: nodes are the focus).
+                    relation_count = max(1, int(data.get("count", 1)))
+                    width = min(1.0 + 0.6 * (relation_count ** 0.5), 5.0)
+                    if focus_id is not None and not dim:
+                        width += 0.8
+                    if is_path_edge or is_selected:
+                        width += 1.5
+                    dash = (5, 3) if data.get('source') in ('ml_predicted', 'link_prediction') else None
+                    if dim:
+                        fill, width, dash = UI_DIM_EDGE, 1.0, None
 
-                # Same-relation records are aggregated; thickness encodes count.
-                relation_count = max(1, int(data.get("count", 1)))
-                width = min(1.25 + 0.8 * (relation_count ** 0.5),
-                            7.0)
-                if is_path_edge or is_selected:
-                    width += 1.5
-
-                tag = f"edge:{u}:{v}:{key}"
-                dash = (5, 3) if data.get('source') in (
-                    'ml_predicted', 'link_prediction'
-                ) else None
-
-                self.canvas.create_line(
-                    x1 + ox, y1 + oy, x2 + ox, y2 + oy,
-                    fill=fill, width=width, dash=dash,  # type: ignore[arg-type]
-                    arrow=tk.LAST, arrowshape=(8, 10, 3),
-                    tags=(tag, "edge")
-                )
-
-                # Keep the canvas uncluttered. Neo4j-style graph views normally
-                # show the relation details when an edge is selected.
-                if is_selected:
-                    mid_x = (x1 + x2) / 2 + ox
-                    mid_y = (y1 + y2) / 2 + oy
-                    self.canvas.create_text(
-                        mid_x, mid_y - 10,
-                        text=f"{relation}  ({relation_count})",
-                        fill=fill, font=("Arial", 8, "bold"),
+                    pts = curve(u, v, idx, count)
+                    tag = f"edge:{u}:{v}:{key}"
+                    self.canvas.create_line(
+                        *pts, smooth=True, fill=fill, width=width, dash=dash,  # type: ignore[arg-type]
+                        arrow=tk.LAST, arrowshape=(7, 9, 3), capstyle="round",
                         tags=(tag, "edge")
                     )
 
-        # Draw small circular nodes last so they remain easy to select.
-        for node_id, data in self.G.nodes(data=True):
-            if node_id not in visible:
-                continue
-            x, y = positions[node_id]
-            r = self.node_radius(data)
+                    # Keep the canvas uncluttered: relation details only for the selected link.
+                    if is_selected:
+                        self.canvas.create_text(
+                            pts[16], pts[17] - 10,
+                            text=f"{relation}  ({relation_count})",
+                            fill=fill, font=("Arial", 8, "bold"),
+                            tags=(tag, "edge")
+                        )
 
-            outline = "#e67e22" if node_id == self.selected_node else "#555555"
-            width = 3 if node_id in (
-                self.selected_node, self.pending_first_node
-            ) else 1
+        def draw_nodes(dim_pass):
+            for node_id, data in self.G.nodes(data=True):
+                if node_id not in visible or node_dim(node_id) != dim_pass:
+                    continue
+                x, y = positions[node_id]
+                r = self.node_radius(data)
+                is_sel = node_id == self.selected_node
 
-            fill_color = data.get(
-                'color', self.get_color(data.get('type', 'Entity'))
-            )
-            if 'community' in data:
-                fill_color = self.community_palette[
-                    data['community'] % len(self.community_palette)
-                ]
+                fill_color = data.get('color', self.get_color(data.get('type', 'Entity')))
+                if 'community' in data:
+                    fill_color = self.community_palette[data['community'] % len(self.community_palette)]
+                outline = "#e67e22" if is_sel else "#555555"
+                width = 4 if is_sel else 3 if node_id == self.pending_first_node else 1
+                if dim_pass:
+                    fill_color, outline, width = UI_DIM_NODE, UI_DIM_NODE_LINE, 1
+                if is_sel:   # soft halo so the selection is obvious at a glance
+                    self.canvas.create_oval(x - r - 5, y - r - 5, x + r + 5, y + r + 5, outline="#f5b041",
+                                            width=2, tags=(node_id, "entity"))  # type: ignore[arg-type]
+                self.canvas.create_oval(
+                    x - r, y - r, x + r, y + r,
+                    fill=fill_color, outline=outline, width=width,
+                    tags=(node_id, "entity")  # type: ignore[arg-type]
+                )
+                self._draw_node_label(node_id, x, y, r, str(data.get('label', node_id)), is_sel,
+                                      dim=dim_pass, fill_colour=fill_color)
 
-            self.canvas.create_oval(
-                x - r, y - r, x + r, y + r,
-                fill=fill_color, outline=outline, width=width,
-                tags=(node_id, "entity")  # type: ignore[arg-type]
-            )
+        # Links first (faded ones, then highlighted ones), nodes last, so no line is ever drawn over a node.
+        draw_edges(True)
+        draw_edges(False)
+        draw_nodes(True)
+        draw_nodes(False)
 
-            label = str(data.get('label', node_id))
-            # The ID is the graph's canonical label. For long IDs, shrink the
-            # font slightly rather than turning the node into a large box.
-            font_size = 8 if len(label) <= 8 else 7
-            self.canvas.create_text(
-                x, y, text=label, fill="white",
-                font=("Arial", font_size, "bold"),
-                tags=(node_id, "entity")  # type: ignore[arg-type]
-            )
-
+        self._update_legend()
+        self._refresh_case_files()
         zoom = float(self.graph_zoom.get())
         if abs(zoom - 1.0) > 0.001:
-            cx = self.canvas.winfo_width() / 2
-            cy = self.canvas.winfo_height() / 2
+            cx, cy = self._view_center()
             self.canvas.scale("all", cx, cy, zoom, zoom)
+        if abs(self._view_off[0]) > 0.01 or abs(self._view_off[1]) > 0.01:
+            self.canvas.move("all", self._view_off[0], self._view_off[1])
+        self._back_node_labels()
 
     # ========================== INTERACTION ==========================
 
+    def _hit_items(self, event):
+        """Canvas items within a few pixels of the pointer, topmost first (empty background gives nothing)."""
+        try:
+            items = self.canvas.find_overlapping(event.x - 4, event.y - 4, event.x + 4, event.y + 4)
+        except Exception:
+            items = ()
+        return list(reversed(items))
+
     def _node_at(self, event):
-        item = self.canvas.find_closest(event.x, event.y)
-        tags = self.canvas.gettags(item)  # type: ignore[arg-type]
-        for t in tags:
-            if t in self.G.nodes:
-                return t
+        for item in self._hit_items(event):
+            for t in self.canvas.gettags(item):  # type: ignore[arg-type]
+                if t in self.G.nodes:
+                    return t
         return None
 
     def _edge_at(self, event):
-        """Return the specific edge nearest the click, if its canvas item is tagged."""
-        item = self.canvas.find_closest(event.x, event.y)
-        tags = self.canvas.gettags(item)  # type: ignore[arg-type]
-        for tag in tags:
-            if isinstance(tag, str) and tag.startswith("edge:"):
-                parts = tag.split(":", 3)
-                if len(parts) == 4:
-                    try:
-                        return parts[1], parts[2], int(parts[3])
-                    except ValueError:
-                        return None
+        """Return the specific edge under the pointer, if its canvas item is tagged."""
+        for item in self._hit_items(event):
+            for tag in self.canvas.gettags(item):  # type: ignore[arg-type]
+                if isinstance(tag, str) and tag.startswith("edge:"):
+                    parts = tag.split(":", 3)
+                    if len(parts) == 4:
+                        try:
+                            return parts[1], parts[2], int(parts[3])
+                        except ValueError:
+                            return None
         return None
 
     def on_canvas_click(self, event):
         node_id = self._node_at(event)
+        self._pan_start, self._pan_moved = None, False
 
         if self.mode == "select":
             if node_id:
@@ -4932,6 +5648,9 @@ class CriminalNetworkAnalyst:
                 self.dragging_node = node_id
                 self.update_inspector(node_id)
                 self._show_ai_selection(node_id)
+                nd = self.G.nodes[node_id]
+                self.status_var.set(f"Selected {nd.get('label', node_id)} ({nd.get('type', 'Entity')}), "
+                                    f"{self.G.degree(node_id)} link(s). Press Explain Score or ask the copilot a question.")
             else:
                 edge = self._edge_at(event)
                 if edge:
@@ -4941,20 +5660,20 @@ class CriminalNetworkAnalyst:
                     self.dragging_node = None
                     self.update_edge_inspector(u, v, key)
                 else:
-                    self.selected_node = None
-                    self.selected_edge = None
                     self.dragging_node = None
-                    self.clear_inspector()
+                    self._begin_pan(event)      # drag the background = pan; a plain click clears the selection on release
+                    return
             self.redraw_canvas()
 
         elif self.mode == "link":
             if not node_id:
+                self._begin_pan(event)
                 return
             if self.pending_first_node is None:
                 self.pending_first_node = node_id
                 self.status_var.set(
-                    f"Mode: LINK - first entity set to '{self.G.nodes[node_id]['label']}'. "
-                    "Click the second entity."
+                    f"Link mode: first entity is '{self.G.nodes[node_id]['label']}'. "
+                    "Now click the second entity."
                 )
             else:
                 if node_id != self.pending_first_node:
@@ -4963,36 +5682,54 @@ class CriminalNetworkAnalyst:
                     if relation:
                         self.add_link(self.pending_first_node, node_id, relation)
                 self.pending_first_node = None
-                self.status_var.set("Mode: LINK - click the first entity, then the second entity")
+                self.status_var.set(STATUS_LINK)
             self.redraw_canvas()
 
         elif self.mode == "path":
             if not node_id:
+                self._begin_pan(event)
                 return
             if self.pending_first_node is None:
                 self.pending_first_node = node_id
                 self.status_var.set(
-                    f"Mode: PATH - start set to '{self.G.nodes[node_id]['label']}'. "
-                    "Click destination."
+                    f"Path mode: start is '{self.G.nodes[node_id]['label']}'. "
+                    "Now click the destination entity."
                 )
             else:
                 self.compute_and_show_path(self.pending_first_node, node_id)
                 self.pending_first_node = None
                 self.mode = "select"
                 self.mode_var.set("select")
-                self.status_var.set("Mode: SELECT - click a node to inspect, drag to move")
+                self.status_var.set(STATUS_SELECT)
 
     def on_canvas_drag(self, event):
+        if self._pan_start is not None:
+            x0, y0, ox, oy = self._pan_start
+            dx, dy = event.x - x0, event.y - y0
+            if not self._pan_moved and abs(dx) + abs(dy) < 4:
+                return                          # still a click, not a drag
+            self._pan_moved = True
+            self.canvas.configure(cursor="fleur")
+            self._view_off = [ox + dx, oy + dy]
+            self.redraw_canvas()
+            return
         if self.mode == "select" and self.dragging_node:
-            zoom = float(self.graph_zoom.get())
-            cx, cy = self.canvas.winfo_width() / 2, self.canvas.winfo_height() / 2
             target_positions = (self._focus_positions if self._focus_positions else self.node_positions)
-            target_positions[self.dragging_node] = [cx + (event.x - cx) / zoom,
-                                                    cy + (event.y - cy) / zoom]
+            wx, wy = self._screen_to_world(event.x, event.y)
+            target_positions[self.dragging_node] = [wx, wy]
             self.redraw_canvas()
 
     def on_canvas_release(self, event):
         self.dragging_node = None
+        if self._pan_start is not None:
+            moved = self._pan_moved
+            self._pan_start, self._pan_moved = None, False
+            self.canvas.configure(cursor="cross")
+            if not moved and self.mode == "select":      # a click on empty background clears the selection
+                self.selected_node = None
+                self.selected_edge = None
+                self.show_inspector_empty()
+                self.redraw_canvas()
 
     def on_canvas_right_click(self, event):
         node_id = self._node_at(event)
@@ -5008,7 +5745,7 @@ class CriminalNetworkAnalyst:
                 del self.node_positions[node_id]
                 self.selected_node = None
                 self.selected_edge = None
-                self.clear_inspector()
+                self.show_inspector_empty()
                 if self.neo4j.connected:
                     try:
                         self.neo4j.delete_node(node_id)
@@ -5026,7 +5763,7 @@ class CriminalNetworkAnalyst:
         del self.node_positions[node_id]
         self.selected_node = None
         self.selected_edge = None
-        self.clear_inspector()
+        self.show_inspector_empty()
         if self.neo4j.connected:
             try:
                 self.neo4j.delete_node(node_id)
@@ -5059,6 +5796,7 @@ class CriminalNetworkAnalyst:
             return
 
         data = self.G.nodes[node_id]
+        self.prop_tree.insert("", tk.END, values=("Entity", f"{data.get('label', node_id)}  ({data.get('type', 'Entity')})"))
         self.prop_tree.insert("", tk.END, values=("System ID", node_id))
 
         properties = data.get("properties", {})
@@ -6078,8 +6816,7 @@ class CriminalNetworkAnalyst:
         self._last_link_predictions = []
         self.selected_node = None
         self.selected_edge = None
-        for i in self.prop_tree.get_children():
-            self.prop_tree.delete(i)
+        self.show_inspector_empty()
         self.redraw_canvas()
         self._commit_ai_snapshot()
 
@@ -6088,34 +6825,33 @@ class CriminalNetworkAnalyst:
 
     def _build_ai_panel(self):
         """Build the AI Copilot inside the existing right-side panel."""
-        action_row = tk.Frame(self.ai_tab, bg="#d9d9d9")
-        action_row.pack(fill=tk.X, padx=5, pady=2)
-        tk.Button(action_row, text="Explain Score", bg="#66cccc", command=self.ai_explain_selected).pack(side=tk.LEFT, expand=True, fill=tk.X, padx=(0, 2))
-        tk.Button(action_row, text="Find Anomalies", command=self.run_anomaly_detection).pack(side=tk.LEFT, expand=True, fill=tk.X, padx=(2, 0))
+        action_row = tk.Frame(self.ai_tab, bg=UI_BG)
+        action_row.pack(fill=tk.X, padx=8, pady=UI_PADY)
+        self._btn(action_row, "Explain Score", self.ai_explain_selected, kind="primary").pack(side=tk.LEFT, expand=True, fill=tk.X, padx=(0, 3))
+        self._btn(action_row, "Find Anomalies", self.run_anomaly_detection).pack(side=tk.LEFT, expand=True, fill=tk.X, padx=(3, 0))
 
-        action_row2 = tk.Frame(self.ai_tab, bg="#d9d9d9")
-        action_row2.pack(fill=tk.X, padx=5, pady=2)
-        tk.Button(action_row2, text="Show Evidence", command=self.ai_show_evidence).pack(side=tk.LEFT, expand=True, fill=tk.X, padx=(0, 2))
-        tk.Button(action_row2, text="Challenge AI", command=self.ai_challenge).pack(side=tk.LEFT, expand=True, fill=tk.X, padx=(2, 0))
+        action_row2 = tk.Frame(self.ai_tab, bg=UI_BG)
+        action_row2.pack(fill=tk.X, padx=8, pady=UI_PADY)
+        self._btn(action_row2, "Show Evidence", self.ai_show_evidence).pack(side=tk.LEFT, expand=True, fill=tk.X, padx=(0, 3))
+        self._btn(action_row2, "Challenge AI", self.ai_challenge).pack(side=tk.LEFT, expand=True, fill=tk.X, padx=(3, 0))
 
         # Bottom widgets are packed first so they are never pushed off-screen.
         self.ai_activity_var = tk.StringVar(value="AI ACTIVITY: ready")
-        tk.Label(self.ai_tab, textvariable=self.ai_activity_var, bg="#d9d9d9", fg="#555555",
-                 anchor="w", font=("Arial", 8)).pack(side=tk.BOTTOM, fill=tk.X, padx=5, pady=(0, 4))
+        tk.Label(self.ai_tab, textvariable=self.ai_activity_var, bg=UI_BG, fg="#555555",
+                 anchor="w", font=("Arial", 8)).pack(side=tk.BOTTOM, fill=tk.X, padx=8, pady=(0, 4))
 
-        input_row = tk.Frame(self.ai_tab, bg="#d9d9d9")
-        input_row.pack(side=tk.BOTTOM, fill=tk.X, padx=5, pady=(0, 2))
-        self.ai_input = tk.Entry(input_row)
-        self.ai_input.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        input_row = tk.Frame(self.ai_tab, bg=UI_BG)
+        input_row.pack(side=tk.BOTTOM, fill=tk.X, padx=8, pady=(0, 4))
+        self.ai_input = tk.Entry(input_row, font=UI_FONT)
+        self.ai_input.pack(side=tk.LEFT, fill=tk.X, expand=True, ipady=3)
         self.ai_input.bind("<Return>", lambda _e: self.ask_ai())
-        tk.Button(input_row, text="✦ ASK AI", bg="#66cccc", command=self.ask_ai).pack(side=tk.RIGHT, padx=(4, 0))
+        self._btn(input_row, "✦ ASK AI", self.ask_ai, kind="primary").pack(side=tk.RIGHT, padx=(6, 0), ipadx=4)
 
         # Pack below the response; dynamically updated with case-specific follow-ups.
-        self.question_panel = tk.Frame(self.ai_tab, bg="#d9d9d9")
-        self.question_panel.pack(side=tk.BOTTOM, fill=tk.X, padx=4, pady=(3, 4))
-        tk.Label(self.question_panel, text="SUGGESTED QUESTIONS", bg="#404040", fg="white",
-                 font=("Arial", 9, "bold")).pack(fill=tk.X)
-        self.question_buttons_frame = tk.Frame(self.question_panel, bg="#d9d9d9")
+        self.question_panel = tk.Frame(self.ai_tab, bg=UI_BG)
+        self.question_panel.pack(side=tk.BOTTOM, fill=tk.X, padx=8, pady=(3, 4))
+        self._section(self.question_panel, "SUGGESTED QUESTIONS", pady=0)
+        self.question_buttons_frame = tk.Frame(self.question_panel, bg=UI_BG)
         self.question_buttons_frame.pack(fill=tk.X)
         self.standard_questions = [
             "Why is this entity important?",
@@ -6124,77 +6860,122 @@ class CriminalNetworkAnalyst:
         ]
         self._update_suggested_questions([])
 
-        tk.Label(self.ai_tab, text="✦ AI RESPONSE", bg="#404040", fg="white",
-                 font=("Arial", 9, "bold")).pack(fill=tk.X, pady=(4, 0))
-        self.ai_chat = tk.Text(self.ai_tab, height=8, wrap="word", bg="white", fg="black", relief=tk.SUNKEN,
-                               bd=1, font=("Arial", 9))
-        self.ai_chat.pack(fill=tk.BOTH, expand=True, padx=5, pady=4)
-        self.ai_chat.insert("1.0", "AI Copilot ready. Select an entity or ask a question.\n\n"
-                                   "This assistant queries the live graph and FIR evidence only when needed.\n")
-        self.ai_chat.tag_configure("chat_header", font=("Arial", 9, "bold"), foreground="#184e77")
+        self._section(self.ai_tab, "✦ AI COPILOT", pady=4)
+        chat_wrap = tk.Frame(self.ai_tab, bg=UI_BG)
+        chat_wrap.pack(fill=tk.BOTH, expand=True, padx=8, pady=4)
+        chat_scroll = ttk.Scrollbar(chat_wrap, orient="vertical")
+        chat_scroll.pack(side=tk.RIGHT, fill=tk.Y)
+        self.ai_chat = tk.Text(chat_wrap, height=8, wrap="word", bg="white", fg="black", relief=tk.SUNKEN,
+                               bd=1, font=("Arial", 10), padx=6, pady=4, yscrollcommand=chat_scroll.set)
+        chat_scroll.configure(command=self.ai_chat.yview)
+        self.ai_chat.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        self.ai_chat.insert("1.0", "AI Copilot ready.\n\n"
+                                   "1. Import case data from the File menu.\n"
+                                   "2. Click an entity in the graph, or type a question below.\n\n"
+                                   "Answers come from the live graph and FIR text only. Each answer ends with the tools it used "
+                                   "and an automatic check that every cited file and row really exists.\n")
+        self.ai_chat.tag_configure("chat_header", font=("Arial", 9, "bold"), foreground="#184e77", spacing1=6)
+        self.ai_chat.tag_configure("chat_header_you", font=("Arial", 9, "bold"), foreground="#1b5e20", spacing1=6)
+        self.ai_chat.tag_configure("tools_line", font=("Arial", 8), foreground="#184e77", background="#e6eff6",
+                                   lmargin1=4, lmargin2=4, spacing1=6, spacing3=2)
+        self.ai_chat.tag_configure("cite_ok_line", font=("Arial", 8, "bold"), foreground="#1b7f3b", background="#e6f4ea",
+                                   lmargin1=4, lmargin2=4, spacing1=2, spacing3=2)
+        self.ai_chat.tag_configure("cite_bad_line", font=("Arial", 8, "bold"), foreground="#8a1c1c", background="#fde8e8",
+                                   lmargin1=4, lmargin2=4, spacing1=2, spacing3=2)
+        self.ai_chat.tag_configure("web_line", font=("Arial", 8), foreground="#4a5568", background="#eef1f5",
+                                   lmargin1=4, lmargin2=4, spacing1=2, spacing3=2)
+        self.ai_chat.tag_configure("cite_bad_name", foreground="white", background="#c0392b", font=("Arial", 8, "bold"))
+        self.ai_chat.tag_configure("hint_line", font=("Arial", 8, "italic"), foreground="#777777", spacing1=2)
+        self.ai_chat.tag_raise("cite_bad_name")
+        # tables from the model are re-drawn as cards: a title line, then one 'label  value' line per column
+        self.ai_chat.tag_configure("tbl_title", font=("Arial", 9, "bold"), foreground="#184e77", background="#e6eff6",
+                                   lmargin1=4, lmargin2=4, spacing1=8, spacing3=2)
+        self.ai_chat.tag_configure("tbl_field", font=("Arial", 9), lmargin1=18, lmargin2=18, spacing1=1)
+        self.ai_chat.tag_configure("tbl_row", font=("Arial", 9), lmargin1=10, lmargin2=22, spacing1=2)
+        self.ai_chat.tag_configure("tbl_label", font=("Arial", 8, "bold"), foreground="#6b7785")
+        # structured answers: headline, evidence lines with a confidence chip, caveat, slim footer
+        self.ai_chat.tag_configure("ans_headline", font=("Arial", 11, "bold"), foreground="#102a43", spacing1=4, spacing3=4)
+        self.ai_chat.tag_configure("ans_section", font=("Arial", 8, "bold"), foreground="#6b7785", spacing1=6)
+        self.ai_chat.tag_configure("ans_score", font=("Arial", 8), foreground="#555555", spacing3=2)
+        self.ai_chat.tag_configure("ans_line", font=("Arial", 10), lmargin1=8, lmargin2=20, spacing1=3)
+        self.ai_chat.tag_configure("chip_rec", font=("Arial", 8, "bold"), foreground="#1b7f3b", background="#e6f4ea")
+        self.ai_chat.tag_configure("chip_fir", font=("Arial", 8, "bold"), foreground="#8a5a00", background="#fff3cd")
+        self.ai_chat.tag_configure("chip_inf", font=("Arial", 8, "bold"), foreground="#4a5568", background="#eef1f5")
+        self.ai_chat.tag_configure("chip_bad", font=("Arial", 8, "bold"), foreground="#8a1c1c", background="#fde8e8")
+        self.ai_chat.tag_configure("ans_caveat", font=("Arial", 9, "italic"), foreground="#5d4a00", background="#fff8e1",
+                                   lmargin1=8, lmargin2=8, spacing1=2, spacing3=4)
+        self.ai_chat.tag_configure("footer_ok", font=("Arial", 8, "bold"), foreground="#1b7f3b", spacing1=6)
+        self.ai_chat.tag_configure("footer_line", font=("Arial", 8), foreground="#6b7785", spacing1=6)
         self.ai_chat.configure(state="disabled")
 
     def _update_suggested_questions(self, dynamic_questions=None):
-        """Keep standard prompts and add case-grounded follow-ups after analysis."""
-        questions = list(self.standard_questions)
-        for q in (dynamic_questions or []):
-            q = str(q).strip().lstrip("•-0123456789. ")
+        """At most three short questions: case-grounded follow-ups first, then the standard prompts."""
+        def short(q):
+            q = str(q).strip().lstrip("•-0123456789. ").strip()
+            words = q.split()
+            return (" ".join(words[:12]).rstrip(",;:?") + "?") if len(words) > 12 else q
+        questions = []
+        for q in list(dynamic_questions or []) + list(self.standard_questions):
+            q = short(q)
             if q and q.lower() not in {old.lower() for old in questions}:
-                questions.append(q[:145])
-            if len(questions) >= 6:
+                questions.append(q)
+            if len(questions) >= 3:
                 break
         for widget in self.question_buttons_frame.winfo_children():
             widget.destroy()
         for question in questions:
-            tk.Button(self.question_buttons_frame, text=question, anchor="w",
-                      wraplength=390, justify=tk.LEFT, relief=tk.GROOVE,
-                      command=lambda q=question: self._ask_question(q)).pack(fill=tk.X, pady=1)
+            qb = self._btn(self.question_buttons_frame, question, lambda q=question: self._ask_question(q))
+            qb.configure(anchor="w", wraplength=380, justify=tk.LEFT, padx=8)
+            qb.pack(fill=tk.X, pady=2)
 
     @staticmethod
     def _parse_briefing(answer):
-        """Extract the structured model answer; gracefully handle ordinary-text fallback."""
+        """Structured model answer -> {headline, evidence[(kind, text)], caveat, next_questions}. Understands the new
+        headline/evidence/caveat JSON and the older gist/hypothesis/alternative JSON; plain text is trimmed."""
         raw = str(answer or "").strip()
         raw = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw, flags=re.I)
+        out = {"headline": "", "evidence": [], "caveat": "", "next_questions": []}
         try:
             payload = json.loads(raw)
-            if isinstance(payload, dict) and isinstance(payload.get("gist"), str):
-                qs = payload.get("next_questions", [])
-                if not isinstance(qs, list):
-                    qs = []
-                return {"gist": payload.get("gist", ""),
-                        "hypothesis": payload.get("hypothesis", ""),
-                        "alternative": payload.get("alternative", ""),
-                        "next_questions": [str(x) for x in qs[:3]]}
         except (ValueError, TypeError):
-            pass
-        # Don't display a huge raw response even if the model ignores JSON instructions.
-        sentences = re.split(r"(?<=[.!?])\s+", re.sub(r"\s+", " ", raw))
-        gist = " ".join(sentences[:3])[:650]
-        return {"gist": gist or "No analysis returned.",
-                "hypothesis": "No structured hypothesis was returned; review source evidence.",
-                "alternative": "Graph patterns alone do not establish criminal involvement.",
-                "next_questions": []}
+            payload = None
+        if isinstance(payload, dict) and (isinstance(payload.get("headline"), str) or isinstance(payload.get("gist"), str)):
+            qs = payload.get("next_questions", [])
+            out["next_questions"] = [str(x) for x in (qs if isinstance(qs, list) else [])[:3]]
+            if isinstance(payload.get("headline"), str):
+                ev = []
+                for it in (payload.get("evidence") or []):
+                    kind, txt = (str(it.get("kind", "inference")).lower(), str(it.get("text", "")).strip()) \
+                        if isinstance(it, dict) else ("inference", str(it).strip())
+                    if txt:
+                        ev.append((kind if kind in ("record", "fir", "inference") else "inference", txt))
+                out.update(headline=payload["headline"].strip(), evidence=ev[:4], caveat=str(payload.get("caveat", "")).strip())
+            else:                                           # older schema
+                hyp = str(payload.get("hypothesis", "")).strip()
+                out.update(headline=payload["gist"].strip(), evidence=[("inference", hyp)] if hyp else [],
+                           caveat=str(payload.get("alternative", "")).strip())
+        else:
+            # Don't display a huge raw response even if the model ignores JSON instructions.
+            sentences = re.split(r"(?<=[.!?])\s+", re.sub(r"\s+", " ", raw))
+            out.update(headline=" ".join(sentences[:2])[:400],
+                       caveat="Graph patterns alone do not establish criminal involvement.")
+        out["headline"] = out["headline"] or "No analysis returned."
+        out["gist"], out["alternative"] = out["headline"], out["caveat"]
+        out["hypothesis"] = out["evidence"][0][1] if out["evidence"] else ""
+        return out
 
     def _show_node_briefing(self, answer, deterministic):
-        details = self._parse_briefing(answer)
-        components = deterministic.get("components", {})
-        # Percent values here are normalized signal contributions, not probabilities.
-        score_lines = [f"Evidence Association Score: {deterministic.get('score', 0):.0f}/100 (not guilt probability)"]
-        for key, value in components.items():
-            if isinstance(value, (float, int)):
-                score_lines.append(f"{key.replace('_', ' ').title()}: {value:.2f}")
-        text = ("SCORES\n" + "\n".join(score_lines) +
-                "\n\nANALYST GIST\n" + details["gist"].strip() +
-                "\n\nEVIDENCE EVALUATOR — HYPOTHESIS\n" + details["hypothesis"].strip() +
-                "\nAlternative / limitation: " + details["alternative"].strip())
-        routing = getattr(self.ai, "last_run_summary", "")
-        if routing:
-            text += "\n\n" + routing
-        # Keep the response focused on findings; follow-up questions belong only
-        # in the clickable Suggested Questions panel underneath the response.
-        qlist = details["next_questions"] or ["Which source records best corroborate this entity's role?",
-                                               "What competing explanation fits these connections?"]
-        self._append_ai_chat(text, header="ENTITY ANALYSIS")
+        d = self._parse_briefing(answer)
+        chat = self.ai_chat
+        chat.configure(state="normal")
+        chat.insert("end", "\nENTITY ANALYSIS:\n", "chat_header")
+        self._render_structured_answer(d["headline"], d["evidence"], d["caveat"],
+                                       score_line=score_sentence(deterministic.get("score", 0), deterministic.get("components", {})))
+        chat.see("end")
+        chat.configure(state="disabled")
+        # Follow-up questions belong only in the clickable Suggested Questions panel underneath the response.
+        qlist = d["next_questions"] or ["Which source records best corroborate this entity's role?",
+                                         "What competing explanation fits these connections?"]
         self._update_suggested_questions(qlist)
 
     def _render_ai_agents(self, running=None):
@@ -6218,6 +6999,10 @@ class CriminalNetworkAnalyst:
         self._ai_activity_lines = self._ai_activity_lines[-5:]
         if hasattr(self, "ai_activity_var"):
             self.ai_activity_var.set("AI ACTIVITY: " + " | ".join(x.split("  ", 1)[-1] for x in self._ai_activity_lines[-2:]))
+        try:
+            self._refresh_cost_panel()
+        except Exception:
+            pass
 
     @staticmethod
     def _plain_ai_text(value):
@@ -6231,10 +7016,187 @@ class CriminalNetworkAnalyst:
         value = re.sub(r"(?m)^\s*```[^\n]*$", "", value)
         return value.strip()
 
+    @staticmethod
+    def _split_md_tables(text):
+        """[("text", str) | ("table", headers, rows)] - finds Markdown pipe tables (header row + |---| separator)."""
+        def cells(line):
+            line = line.strip()
+            if line.startswith("|"):
+                line = line[1:]
+            if line.endswith("|"):
+                line = line[:-1]
+            return [c.strip() for c in line.split("|")]
+
+        def is_row(line):
+            t = line.strip()
+            return t.count("|") >= 2 and (t.startswith("|") or t.endswith("|") or " | " in t)
+
+        def is_sep(line):
+            if not is_row(line):
+                return False
+            cs = cells(line)
+            return len(cs) >= 2 and all(re.fullmatch(r":?-+:?", c) for c in cs)
+
+        lines, out, buf, i = str(text or "").split("\n"), [], [], 0
+        while i < len(lines):
+            if i + 1 < len(lines) and is_row(lines[i]) and not is_sep(lines[i]) and is_sep(lines[i + 1]):
+                if buf:
+                    out.append(("text", "\n".join(buf)))
+                    buf = []
+                headers, rows, j = cells(lines[i]), [], i + 2
+                while j < len(lines) and is_row(lines[j]) and not is_sep(lines[j]):
+                    rows.append(cells(lines[j]))
+                    j += 1
+                out.append(("table", headers, rows))
+                i = j
+            else:
+                buf.append(lines[i])
+                i += 1
+        if buf:
+            out.append(("text", "\n".join(buf)))
+        return out
+
+    def _insert_line(self, text, tags=(), cite=False, found=None):
+        """Insert text at the end of the chat. With cite=True every cited source is a clickable chip:
+        blue '✓ file row N' when it exists in the loaded evidence, red '✗ file row N' when it does not."""
+        chat = self.ai_chat
+        tags = tuple(tags)
+
+        def put(t, extra=()):
+            if not t:
+                return
+            allt = tags + tuple(extra)
+            chat.insert("end", t, allt) if allt else chat.insert("end", t)
+
+        if not cite:
+            put(text)
+            return
+        pos = 0
+        for c in find_answer_citations(self, text):
+            if found is not None:
+                found.append(c)
+            put(text[pos:c["start"]])
+            self._citation_seq = getattr(self, "_citation_seq", 0) + 1
+            tag = f"cite_{self._citation_seq}"
+            self._citation_targets[tag] = c
+            if c["status"] == "ok":
+                chat.tag_configure(tag, foreground="#0b5cad", underline=True, background="#e8f1fb")
+            else:
+                chat.tag_configure(tag, foreground="#b00020", underline=False, background="#fde8e8",
+                                   font=("Arial", 9, "bold"))
+            put(("✓ " if c["status"] == "ok" else "✗ ") + c["text"], (tag,))
+            chat.tag_bind(tag, "<Button-1>", lambda _e, t=tag: self._on_citation_click(t))
+            chat.tag_bind(tag, "<Enter>", lambda _e: chat.configure(cursor="hand2"))
+            chat.tag_bind(tag, "<Leave>", lambda _e: chat.configure(cursor=""))
+            pos = c["end"]
+        put(text[pos:])
+
+    def _render_structured_answer(self, headline, evidence, caveat, score_line="", other=()):
+        """Headline, then one line per evidence item with a confidence chip, then the caveat. Returns the citations."""
+        chat = self.ai_chat
+        found = []
+        if headline:
+            self._insert_line(self._plain_ai_text(headline) + "\n", ("ans_headline",), True, found)
+        if score_line:
+            chat.insert("end", "Score " + score_line + "\n", "ans_score")
+        if evidence:
+            chat.insert("end", "EVIDENCE\n", "ans_section")
+            for kind, text in evidence:
+                text = re.sub(r"\s+", " ", self._plain_ai_text(text)).strip()
+                cs = find_answer_citations(self, text)
+                ok_csv = any(c["status"] == "ok" and str(c["file"]).lower().endswith(".csv") for c in cs)
+                ok_other = any(c["status"] == "ok" and not str(c["file"]).lower().endswith(".csv") for c in cs)
+                if kind == "record":
+                    chip = ("✓ Supported by records", "chip_rec") if ok_csv else ("⚠ No verified source", "chip_bad")
+                elif kind == "fir":
+                    chip = ("Alleged in FIR", "chip_fir") if ok_other else ("⚠ No verified source", "chip_bad")
+                else:
+                    chip = ("Inference", "chip_inf")
+                chat.insert("end", f" {chip[0]} ", ("ans_line", chip[1]))
+                self._insert_line("  " + text + "\n", ("ans_line",), True, found)
+        if caveat:
+            chat.insert("end", "CAVEAT\n", "ans_section")
+            self._insert_line(self._plain_ai_text(caveat) + "\n", ("ans_caveat",), True, found)
+        for line in other:
+            self._insert_line(self._plain_ai_text(line) + "\n", (), True, found)
+        return found
+
+    def _insert_answer_footer(self, tools, cite, found):
+        """One slim line when everything checks out; the full TOOLS USED / CITATION CHECK lines (red) when not."""
+        chat = self.ai_chat
+        lines = [l.strip() for l in str(cite or "").splitlines() if l.strip()]
+        any_bad = any(("NOT FOUND" in l or "NOT returned" in l) for l in lines)
+        ok_n = sum(1 for c in found if c["status"] == "ok")
+        if any_bad:
+            bad_labels = [c["label"] for c in found if c["status"] == "bad"]
+            if tools:
+                chat.insert("end", tools + "\n", "tools_line")
+            for line in lines:
+                if line.upper().startswith("EXTERNAL SOURCES"):
+                    style = "cite_bad_line" if "NOT returned" in line else "web_line"
+                else:
+                    style = "cite_bad_line" if "NOT FOUND" in line else "cite_ok_line"
+                at = chat.index("end-1c")
+                chat.insert("end", line + "\n", style)
+                if style == "cite_bad_line":
+                    for lab in bad_labels:
+                        pos = line.find(lab)
+                        if pos >= 0:
+                            chat.tag_add("cite_bad_name", f"{at}+{pos}c", f"{at}+{pos + len(lab)}c")
+        else:
+            m = re.search(r"CITATION CHECK:\s*(\d+) verified", lines[0]) if lines else None
+            n = ok_n if found else (int(m.group(1)) if m else 0)     # the chips the reader can click
+            names = []
+            if tools and ":" in tools:
+                for item in tools.split(":", 1)[1].split(";"):
+                    mm = re.match(r"\s*([A-Za-z_]+)", item)
+                    if mm and mm.group(1).lower() != "none" and mm.group(1) not in names:
+                        names.append(mm.group(1))
+            chat.insert("end", (f"✓ {n} cited source{'s' if n != 1 else ''} verified" if n else "No case files cited"),
+                        "footer_ok" if n else "footer_line")
+            rest = []
+            if names:
+                rest.append("tools: " + ", ".join(names))
+            for l in lines:
+                mw = re.search(r"EXTERNAL SOURCES.*?:\s*(\d+) URL", l)
+                if mw:
+                    rest.append(f"{mw.group(1)} web source(s) matched")
+            chat.insert("end", ("  ·  " + "  ·  ".join(rest) if rest else "") + "\n", "footer_line")
+        if ok_n:
+            chat.insert("end", "Click a ✓ source to open that CSV row or FIR excerpt in the Property Inspector.\n", "hint_line")
+
+    def _insert_rich(self, text, cite=False):
+        """Insert a model response: prose as plain text, Markdown tables as cards. Returns the citations found."""
+        chat = self.ai_chat
+        found = []
+        clean = lambda c: re.sub(r"\s+", " ", self._plain_ai_text(c)).strip()
+        for blk in self._split_md_tables(text):
+            if blk[0] == "text":
+                t = self._plain_ai_text(blk[1])
+                if t:
+                    self._insert_line(t + "\n", cite=cite, found=found)
+                continue
+            _kind, headers, rows = blk
+            headers = [clean(h) for h in headers]
+            ncol = len(headers)
+            for r in rows:
+                vals = [clean(c) for c in r] + [""] * max(0, ncol - len(r))
+                if ncol <= 2:               # label : value
+                    chat.insert("end", vals[0] + "  ", ("tbl_row", "tbl_label"))
+                    self._insert_line((vals[1] if ncol > 1 else "") + "\n", ("tbl_row",), cite, found)
+                    continue
+                self._insert_line(vals[0] + "\n", ("tbl_title",), cite, found)
+                for h, v in zip(headers[1:], vals[1:ncol]):
+                    if not v or re.fullmatch(r"[-–—−]+", v):
+                        continue            # nothing to show for this column
+                    chat.insert("end", h + "  ", ("tbl_field", "tbl_label"))
+                    self._insert_line(v + "\n", ("tbl_field",), cite, found)
+        return found
+
     def _append_ai_chat(self, text, header="AI"):
         self.ai_chat.configure(state="normal")
-        self.ai_chat.insert("end", f"\n{header}:\n", "chat_header")
-        self.ai_chat.insert("end", self._plain_ai_text(text) + "\n")
+        self.ai_chat.insert("end", f"\n{header}:\n", "chat_header_you" if header == "YOU" else "chat_header")
+        self._insert_rich(text)
         self.ai_chat.see("end")
         self.ai_chat.configure(state="disabled")
 
@@ -6245,10 +7207,9 @@ class CriminalNetworkAnalyst:
         # AI Copilot remains visible alongside the inspector.
         score = self.calculate_evidence_score(node_id)
         anomaly_count = len(self._anomaly_results.get(str(node_id), []))
-        text = (f"Selected entity: {label} ({node_id})\n"
-                f"Evidence Association Score: {score['score']:.0f}/100\n"
-                f"Detected anomaly signals: {anomaly_count}\n\n"
-                f"Suggested: click 'Explain Score' or ask a question below.")
+        text = (f"Selected: {label} ({node_id})\n"
+                f"Evidence score {score_sentence(score['score'], score['components'])}\n"
+                f"Anomaly signals detected: {anomaly_count}. Click 'Explain Score' or ask a question below.")
         self._append_ai_chat(text, header="✦ AI BRIEFING")
         self._update_suggested_questions([f"Which links involving {label} have the strongest source evidence?"])
 
@@ -6364,6 +7325,9 @@ class CriminalNetworkAnalyst:
         wl = web_usage_line(self)
         if wl:
             grounding += "\n\n" + wl
+        routing = getattr(self.ai, "last_run_routing", "")
+        if routing:
+            grounding += "\n\nLAST DEEP ANALYSIS\n" + routing
         messagebox.showinfo("Nebius usage & estimated cost", self.ai.backend.usage_report() + grounding)
 
     def check_nebius_models(self):
@@ -6525,6 +7489,11 @@ class CriminalNetworkAnalyst:
     def _ask_question(self, text):
         if self._ai_busy:
             return
+        node = self.selected_node if self.selected_node in self.G else None
+        if node is not None:       # a suggested question always concerns the entity that is selected
+            lab = str(self.G.nodes[node].get("label", node))
+            if lab.casefold() not in text.casefold():
+                text = f"About {lab}: {text}"
         self._append_ai_chat(text, header="YOU")
         self._run_ai_async(text, deep=False)
 
@@ -6532,6 +7501,10 @@ class CriminalNetworkAnalyst:
         node_id = self.selected_node if self.selected_node in self.G else None
         self._apply_ai_settings()
         self._ai_busy = True
+        try:
+            self._cost_mark = len(self.ai.backend.usage_entries())
+        except Exception:
+            self._cost_mark = 0
         self._ai_activity("Query received — retrieving live evidence")
         self.ai_status_var.set(f"… {self._ai_name()} WORKING")
         def worker():
@@ -6554,7 +7527,7 @@ class CriminalNetworkAnalyst:
             answer, specialists, deterministic = result
             self._show_node_briefing(answer, deterministic)
         else:
-            self._append_ai_chat(str(result), header="✦ AI COPILOT")
+            self._append_ai_answer(str(result), header="✦ AI COPILOT")
             self._record_saved_answer(question, result)
         self._ai_activity("Response generated")
 
@@ -6703,8 +7676,7 @@ class CriminalNetworkAnalyst:
         self._last_evaluation = None
         self.selected_node = None
         self.selected_edge = None
-        for i in self.prop_tree.get_children():
-            self.prop_tree.delete(i)
+        self.show_inspector_empty()
         self._commit_ai_snapshot()
 
     def _demo_status(self, step, total, text):
@@ -6854,7 +7826,7 @@ class CriminalNetworkAnalyst:
             "folder": str(found),
         }
         self.status_var.set(f"Demo case loaded in {elapsed:.1f}s: {summary['nodes']} entities, {summary['edges']} relationships, "
-                            f"{obs} observations.")
+                            f"{obs} observations. Next: click an entity, then ask the copilot.")
         self._ai_activity("Demo case loaded")
         messagebox.showinfo(
             "Demo case loaded",
@@ -7008,7 +7980,7 @@ class CriminalNetworkAnalyst:
     def _fuzzy_fir_candidate(self, entity_type, value):
         """Return the best existing node label match and its ratio score."""
         if not HAS_THEFUZZ:
-            raise RuntimeError("TheFuzz is required for FIR entity matching. Install: pip install thefuzz")
+            raise RuntimeError("TheFuzz is required for FIR entity matching. Install: pip install thefuzz python-Levenshtein")
         target = FIRProcessor._normalise_value(value)
         if not target:
             return None, 0
@@ -7186,7 +8158,10 @@ class CriminalNetworkAnalyst:
         self._apply_ai_settings()   # make sure the latest Nebius key is used for OCR
         # AI Copilot remains visible alongside the inspector.
         self._ai_activity("FIR received — extracting named entities")
-        self._append_ai_chat(f"Processing scanned FIR: {Path(path).name}", header="YOU")
+        self._fir_current = Path(path).name
+        self._fir_inflight[self._fir_current] = "processing"
+        self._refresh_case_files()
+        self.status_var.set(f"Processing FIR: {self._fir_current} (OCR, then entity extraction)…")
         self.ai_status_var.set("… FIR OCR WORKING")
 
         def worker():
@@ -7218,6 +8193,7 @@ class CriminalNetworkAnalyst:
 
     def _finish_fir_upload(self, path, result, auto_confirm_exact=False):
         self._fir_busy = False
+        self._fir_inflight.pop(Path(path).name, None)
         self.ai_status_var.set("● FIR OCR READY")
         try:
             text = str(result.get("transcription", "")).strip()
@@ -7275,7 +8251,9 @@ class CriminalNetworkAnalyst:
                 "Only extracted entities were added to the graph; FIRs do not add relationships.\n"
                 "Town matches were investigator-reviewed when the town registry was populated."
             )
-            self._append_ai_chat(summary, header="✦ FIR → GRAPH")
+            self._refresh_case_files(force=True)
+            self.status_var.set(f"FIR integrated: {Path(path).name}  ·  {len(structured.get('entities', []))} entities extracted, "
+                                f"{created} new, {matched} merged.")
             if self.selected_node not in self.G and entity_nodes:
                 self.selected_node = next(iter(entity_nodes.values()))
             if self.selected_node in self.G:
@@ -7287,8 +8265,11 @@ class CriminalNetworkAnalyst:
     def _fir_upload_error(self, message):
         self._fir_busy = False
         self.ai_status_var.set("○ FIR OCR FAILED")
+        if self._fir_current:
+            self._fir_inflight[self._fir_current] = "failed"
+        self._refresh_case_files(force=True)
+        self.status_var.set(f"FIR processing failed: {message[:140]}")
         messagebox.showerror("FIR Processing Failed", message)
-        self._append_ai_chat(message, header="FIR STATUS")
         self._ai_activity("FIR processing failed")
 
 
